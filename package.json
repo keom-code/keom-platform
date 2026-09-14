@@ -14,6 +14,7 @@
     "format": "prettier --write ."
   },
   "devDependencies": {
+    "@google/design.md": "^0.4.0",
     "eslint": "^9.17.0",
     "prettier": "^3.4.2",
     "turbo": "^2.3.3",

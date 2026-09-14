@@ -37,6 +37,12 @@
       "skillPath": "skills/brandkit/SKILL.md",
       "computedHash": "b63012f3c3d21197e0185d3e9cc7ec40c589fb10e0b5a32a561739de31aa3f20"
     },
+    "design-md": {
+      "source": "arumwu/design-md-skill",
+      "sourceType": "github",
+      "skillPath": "SKILL.md",
+      "computedHash": "07ddedd526f6c2c5ef17e9ee6c97a23020c66e0e63aa7af268432d5922faafc4"
+    },
     "design-taste-frontend": {
       "source": "Leonxlnx/taste-skill",
       "sourceType": "github",
@@ -78,6 +84,12 @@
       "sourceType": "github",
       "skillPath": "skills/soft-skill/SKILL.md",
       "computedHash": "7db385e4c5370e5a7fca9704a1361b056e4504ea6a03924bb86f33a4f00b5c73"
+    },
+    "humanizer": {
+      "source": "blader/humanizer",
+      "sourceType": "github",
+      "skillPath": "SKILL.md",
+      "computedHash": "0a4518725b506f6c83e65f2d6d87cb56fbc042ba92de5eecb1ef8b995ec69d70"
     },
     "image-to-code": {
       "source": "Leonxlnx/taste-skill",
@@ -150,6 +162,24 @@
       "sourceType": "github",
       "skillPath": "skills/stitch-skill/SKILL.md",
       "computedHash": "13322f38406cd3abf16ba45e35bdc9b18002d0153a79b4612b97aefc65d5a335"
+    },
+    "tdd-red-green-refactor": {
+      "source": "google-labs-code/design.md",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/tdd/SKILL.md",
+      "computedHash": "aa567771e6963cb2b34115db22a3f6417f0c910d76d0e7d695b544f502d936f1"
+    },
+    "typed-service-contracts": {
+      "source": "google-labs-code/design.md",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/typed-service-contracts/SKILL.md",
+      "computedHash": "e3b4c278b545b842245f0edbbf4da3c682ec22c8ad543e7210edb3bff2765e0f"
+    },
+    "ui-ux-pro-max": {
+      "source": "nextlevelbuilder/ui-ux-pro-max-skill",
+      "sourceType": "github",
+      "skillPath": ".claude/skills/ui-ux-pro-max/SKILL.md",
+      "computedHash": "4080ff883b26b670a5a224fb332e89ecc15319535f4d14279947ad7812fec558"
     },
     "write-swift": {
       "source": "emilkowalski/skill",

@@ -108,9 +108,7 @@ apps/web/
 │   │   │   └── alerts/
 │   │   │       ├── page.tsx
 │   │   │       └── [alertId]/page.tsx
-│   │   └── api/                      # Next Route Handlers — NOT a proxy to apps/api.
-│   │       ├── auth/login/route.ts   # mock DNI login → issues session cookie
-│   │       ├── auth/logout/route.ts
+│   │   └── api/                      # Next Route Handlers — NOT a BFF proxy in front of apps/api.
 │   │       └── push/subscribe/route.ts  # stub for web push subscription storage
 │   │
 │   ├── features/                     # Feature/domain modules — where business logic + domain UI live
@@ -147,7 +145,7 @@ apps/web/
 │   ├── providers/                    # ThemeProvider, SessionProvider (hydrated from server, read-only), QueryProvider
 │   ├── hooks/                        # Generic, cross-feature only: useMediaQuery, useIsMobile
 │   ├── config/                       # nav.ts (per-role nav items), site.ts, env.ts (Zod-validated process.env)
-│   └── middleware.ts                 # verifies session cookie, enforces /seller/* vs /admin/* at the edge
+│   └── proxy.ts                      # verifies session cookie, enforces /seller/* vs /admin/*
 │
 ├── public/
 │   ├── manifest.webmanifest
@@ -167,7 +165,7 @@ apps/web/
 - **schemas**: contract-level (API shape) → `packages/contracts`; UI-only (form validation) → `features/*/schemas`.
 - **types**: contract-level → `packages/contracts`; app-only (e.g., nav item shape) → inline or `src/config`.
 - **providers**: `src/providers`, composed once in `app/layout.tsx`.
-- **auth**: low-level session logic in `lib/auth`; UI in `features/auth`; enforcement in `middleware.ts` + layout guards (defense in depth, not redundancy — middleware blocks navigation, layout guard blocks direct RSC render).
+- **auth**: low-level session logic in `lib/auth`; UI in `features/auth`; enforcement in `proxy.ts` + layout guards (defense in depth, not redundancy — proxy blocks navigation, layout guard blocks direct RSC render).
 - **notifications**: `lib/services/notifications` (subscribe/unsubscribe) + SW click-routing logic in the Serwist service worker file (Phase 9).
 - **charts**: Recharts wrapper components live in `features/reports/components`; no separate "charts package" — this is the one screen that needs them.
 
@@ -286,10 +284,10 @@ interface AuthService {
 - Real replacement later: `HttpAuthService` calling `apps/api`'s real auth endpoint — same interface, zero changes to session/middleware code.
 
 **Session mechanics (the part that must be right from day one):**
-- On successful mock login, `app/api/auth/login/route.ts` issues a **signed** (via `jose`, HS256 for MVP) **httpOnly, Secure, SameSite=Strict** cookie containing `{ id, role }` (never the DNI) and an expiry.
-- `middleware.ts` verifies the signature on every request to `/seller/*` and `/admin/*`, and redirects on missing/invalid/role-mismatched sessions — this is the **edge boundary**, purely for UX (avoid rendering the wrong shell before redirect).
-- `lib/auth/session.ts#getSession()` re-verifies the same cookie server-side inside each role layout (`SellerLayout`/`AdminLayout`) before rendering — **defense in depth**, not redundant: middleware failing open due to a config change shouldn't be the only thing standing between a SELLER and `/admin/*`.
-- **Critical rule carried into Phase 11:** none of this — cookie, middleware, layout guard — is real authorization once a real backend exists. It stays as a UX-layer gate (don't flash the wrong screen). Every mutating/reading call to `apps/api` must independently re-check role server-side. Document this loudly; it's the single most common place teams cut corners later.
+- On successful mock login, the `loginAction` Server Action (`features/auth/actions.ts`) issues a **signed** (via `jose`, HS256 for MVP) **httpOnly, Secure, SameSite=Strict** cookie containing `{ id, role }` (never the DNI) and an expiry.
+- `proxy.ts` (Next.js 16's renamed `middleware.ts` convention — defaults to the Node.js runtime, not Edge) verifies the signature on every request to `/seller/*` and `/admin/*`, and redirects on missing/invalid/role-mismatched sessions — purely a UX boundary (avoid rendering the wrong shell before redirect).
+- `lib/auth/session.ts#getSession()` re-verifies the same cookie server-side inside each role layout (`SellerLayout`/`AdminLayout`) before rendering — **defense in depth**, not redundant: the proxy failing open due to a config change shouldn't be the only thing standing between a SELLER and `/admin/*`.
+- **Critical rule carried into Phase 11:** none of this — cookie, proxy, layout guard — is real authorization once a real backend exists. It stays as a UX-layer gate (don't flash the wrong screen). Every mutating/reading call to `apps/api` must independently re-check role server-side. Document this loudly; it's the single most common place teams cut corners later.
 - Client Components that need `role`/`name` (ProfileMenu, conditional nav) read it from `SessionProvider`, which is hydrated **once, from the server**, from the already-verified session — the client never independently decodes or trusts the cookie.
 
 ---
@@ -310,7 +308,7 @@ interface AuthService {
 
 **Frontend responsibility:**
 - [ ] Session cookie: httpOnly, Secure, SameSite=Strict, signed (jose/HS256 for MVP), short expiry + rotation on login.
-- [ ] `middleware.ts` + layout guards on every `/seller/*` and `/admin/*` route — both, not either.
+- [ ] `proxy.ts` + layout guards on every `/seller/*` and `/admin/*` route — both, not either.
 - [ ] Zero secrets in `NEXT_PUBLIC_*` — those are the *only* env vars sent to the browser bundle; `DATA_SOURCE`, `API_BASE_URL` (if it points somewhere non-public), signing keys all stay server-only.
 - [ ] Zod-validate every external input: login form, any query params driving data fetches, and every `apps/api` response before use.
 - [ ] Escape/sanitize any AI-generated summary text rendered in `AlertCard`/`RiskCard` — treat it as untrusted user-adjacent content even though it's generated server-side (React's default escaping covers most of this; just never `dangerouslySetInnerHTML` it).
@@ -361,7 +359,7 @@ Don't chase coverage percentages or test every shadcn primitive — those are al
 
 **Phase 2 — Mock Authentication**
 - Goals: DNI login issues a real (signed) session; role-based redirect works.
-- Tasks: `packages/mocks` user table; `MockAuthService`; `app/api/auth/login|logout`; `lib/auth/session.ts`; `middleware.ts`; `LoginForm`.
+- Tasks: `packages/mocks` user table; `MockAuthService`; `features/auth/actions.ts` (`loginAction`/`logoutAction`); `lib/auth/session.ts`; `proxy.ts`; `LoginForm`.
 - Deliverables: `/login` → correct redirect by role; direct nav to the wrong role's route redirects away.
 - Acceptance: tampering with the cookie value (not just deleting it) invalidates the session (signature check).
 - Dependencies: Phase 0.
@@ -444,7 +442,7 @@ Goal: something visually demonstrable, running end-to-end on mocks, in one sprin
 
 1. Monorepo scaffold (pnpm + Turborepo), `apps/web` running, `apps/api` placeholder present.
 2. `packages/ui` with core shadcn primitives + KEOM theme tokens (incl. risk tokens), light/dark working.
-3. Mock DNI login (Carlos/SELLER, Andrea/ADMIN) issuing a real signed session cookie; `middleware.ts` role gating.
+3. Mock DNI login (Carlos/SELLER, Andrea/ADMIN) issuing a real signed session cookie; `proxy.ts` role gating.
 4. `AppShell` with responsive nav: Sidebar (desktop) / BottomTabBar (mobile), TopNav with ProfileMenu + ThemeSwitcher.
 5. `/seller/alerts` fully built against `packages/mocks` fixtures: `AlertCard` (priority, avatar, value, AI summary, required action), "Vamos por ello" → acknowledge + WhatsApp deep-link.
 6. One passing Playwright E2E: login → alerts → acknowledge.
@@ -472,7 +470,7 @@ This is deliberately narrower than doing Admin too — Seller Alerts is the high
 
 **Security mistakes to avoid:**
 - Storing `role` in a plain (unsigned) cookie or `localStorage` and trusting it anywhere.
-- Treating `middleware.ts` as the only authorization check (it isn't, and never will be once `apps/api` is real).
+- Treating `proxy.ts` as the only authorization check (it isn't, and never will be once `apps/api` is real).
 - Putting `API_BASE_URL`/signing secrets behind `NEXT_PUBLIC_*` for convenience.
 - Logging DNI or full customer phone numbers in server logs or error tracking.
 - Skipping response validation (Zod) on `apps/api` calls because "we control both sides" — you won't always, and drift happens silently otherwise.
@@ -481,7 +479,7 @@ This is deliberately narrower than doing Admin too — Seller Alerts is the high
 - Session/cookie format and the auth abstraction boundary (`AuthService` interface) — retrofitting this after real auth exists means touching every place that reads session data.
 - The `/seller/*` vs `/admin/*` route prefixes — these will be baked into push-notification deep links and possibly backend webhook payloads; renaming later breaks saved links.
 - `packages/contracts` shape choices (e.g., `SellerAlert` vs `AdminAlertRow` split) — changing the split after the backend has implemented matching DTOs is a coordinated two-repo-equivalent change even though it's one repo.
-- Choosing Vercel-native middleware/edge features now (fine, per the confirmed deploy target) — reversing this if you ever need to self-host later requires re-validating edge-runtime-only code paths.
+- Choosing Vercel-native deploy features now (fine, per the confirmed deploy target) — reversing this if you ever need to self-host later requires re-validating anything that assumed Vercel's platform (image optimization, `proxy.ts`, which itself now defaults to the Node.js runtime as of Next.js 16 rather than Edge).
 
 ---
 
