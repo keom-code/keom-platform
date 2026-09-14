@@ -1,0 +1,20 @@
+{
+  "name": "@keom/contracts",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@keom/config": "workspace:*",
+    "typescript": "^5.7.2"
+  }
+}

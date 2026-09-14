@@ -1,0 +1,20 @@
+{
+  "name": "@keom/mocks",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@keom/contracts": "workspace:*"
+  },
+  "devDependencies": {
+    "@keom/config": "workspace:*",
+    "typescript": "^5.7.2"
+  }
+}

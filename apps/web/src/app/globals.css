@@ -1,0 +1,16 @@
+@import "tailwindcss";
+@import "@keom/config/tailwind/theme.css";
+
+/* next-themes toggles a `.dark` class on <html>; opt Tailwind's dark: variant
+   into that instead of prefers-color-scheme. See docs/ARCHITECTURE.md Section F. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme inline {
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+}

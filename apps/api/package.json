@@ -1,0 +1,12 @@
+{
+  "name": "@keom/api",
+  "private": true,
+  "version": "0.0.0",
+  "scripts": {
+    "dev": "echo \"apps/api not scaffolded yet — see README.md\" && exit 0",
+    "build": "echo \"apps/api not scaffolded yet — see README.md\" && exit 0",
+    "lint": "echo \"apps/api not scaffolded yet — see README.md\" && exit 0",
+    "typecheck": "echo \"apps/api not scaffolded yet — see README.md\" && exit 0",
+    "test": "echo \"apps/api not scaffolded yet — see README.md\" && exit 0"
+  }
+}
