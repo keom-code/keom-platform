@@ -60,8 +60,7 @@ keom/
 │   │
 │   ├── config/                       # Shared tooling config, imported not copy-pasted
 │   │   ├── eslint/
-│   │   ├── typescript/               # tsconfig.base.json
-│   │   └── tailwind/                 # tailwind preset (tokens from packages/ui/theme)
+│   │   └── typescript/               # tsconfig.base.json
 │   │
 │   └── mocks/                        # Canonical fixture data + mock generators
 │       ├── src/
@@ -214,7 +213,7 @@ No route currently needs a tenant/org segment (single-tenant decision).
 ## F. Design System Strategy
 
 - **shadcn/ui usage:** generate primitives directly into `packages/ui/src/components` (not `apps/web`) via the shadcn CLI, so both current and any future app share them. Customize the theme, don't fork component internals.
-- **Theme tokens:** CSS variables in `packages/ui/src/theme`, consumed via the Tailwind preset in `packages/config/tailwind`. Standard shadcn semantic tokens (`background`, `foreground`, `primary`, `muted`, `destructive`, etc.) plus **KEOM-specific risk tokens**:
+- **Theme tokens:** CSS variables in `packages/ui/src/theme/globals.css`, consumed by apps via `@import "@keom/ui/theme.css";` (Tailwind v4's CSS-first config makes a separate JS preset package unnecessary). That file also declares `@source "../components"` so Tailwind scans the workspace-linked `@keom/ui` package for class names — it ignores `node_modules` by default, which is where a workspace package resolves from. Standard shadcn semantic tokens (`background`, `foreground`, `primary`, `muted`, `destructive`, etc.) plus **KEOM-specific risk tokens**:
   ```
   --risk-high-bg / --risk-high-fg / --risk-high-border
   --risk-medium-bg / --risk-medium-fg / --risk-medium-border
@@ -225,7 +224,7 @@ No route currently needs a tenant/org segment (single-tenant decision).
 - **Typography:** Geist (ships zero-config with Next.js) — no need to add a separate font pipeline.
 - **Spacing:** Tailwind's default scale. No custom scale for MVP.
 - **Responsiveness:** desktop-first composition, but every shared layout/component is checked at a 375–400px viewport before being considered done.
-- **Accessibility:** semantic HTML first, shadcn primitives (Radix-based) for anything interactive, visible focus states never removed, color-independent status indicators (see risk tokens above), all icons paired with text or `aria-label`.
+- **Accessibility:** semantic HTML first, shadcn primitives (Base UI-based — the shadcn CLI's current recommended default, unstyled/accessible like Radix) for anything interactive, visible focus states never removed, color-independent status indicators (see risk tokens above), all icons paired with text or `aria-label`.
 - **Gradients:** subtle gradient utility (e.g. a `bg-gradient-card` Tailwind class) applied sparingly to KPI/summary cards only — not a system-wide treatment.
 
 ---

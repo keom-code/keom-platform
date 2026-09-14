@@ -10,7 +10,6 @@
   "exports": {
     "./typescript/base.json": "./typescript/base.json",
     "./typescript/nextjs.json": "./typescript/nextjs.json",
-    "./eslint/base": "./eslint/base.js",
-    "./tailwind/theme.css": "./tailwind/theme.css"
+    "./eslint/base": "./eslint/base.js"
   }
 }
