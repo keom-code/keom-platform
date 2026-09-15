@@ -34,3 +34,8 @@ test-results/
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# generated service worker (Serwist build output — see apps/web/next.config.ts)
+apps/web/public/sw.js
+apps/web/public/sw.js.map
+apps/web/public/swe-worker-*.js

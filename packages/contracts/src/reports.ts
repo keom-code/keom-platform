@@ -7,6 +7,13 @@ export const ReportSummarySchema = z.object({
   recoveredOpportunities: z.number().int().nonnegative(),
   recoveryRate: z.number().min(0).max(1),
   atRiskOpportunities: z.number().int().nonnegative(),
+  /** Prior period for each KPI above (prior day for atRiskOpportunities, which is a
+   * live snapshot rather than a range-derived total) — powers the "vs período
+   * anterior" trend indicators on the KPI cards. */
+  previousRecoveredRevenue: MoneySchema,
+  previousRecoveredOpportunities: z.number().int().nonnegative(),
+  previousRecoveryRate: z.number().min(0).max(1),
+  previousAtRiskOpportunities: z.number().int().nonnegative(),
 });
 export type ReportSummary = z.infer<typeof ReportSummarySchema>;
 

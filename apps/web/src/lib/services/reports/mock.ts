@@ -1,6 +1,6 @@
 import "server-only";
-import { mockAdminReport } from "@keom/mocks";
-import type { AdminReport, SellerMetric, TreatmentMetric } from "@keom/contracts";
+import { mockAdminReport, mockRevenueTimeline60d } from "@keom/mocks";
+import type { AdminReport, RevenuePoint, SellerMetric, TreatmentMetric } from "@keom/contracts";
 import type { ReportFilterOptions, ReportFilters, ReportsService } from "./interface";
 
 function delay(ms: number): Promise<void> {
@@ -8,6 +8,13 @@ function delay(ms: number): Promise<void> {
 }
 
 const DAYS_BY_PRESET = { TODAY: 1, "7D": 7, "30D": 30, CUSTOM: 30 } as const;
+
+function sumRevenue(points: RevenuePoint[]) {
+  return {
+    recoveredRevenue: points.reduce((sum, p) => sum + p.recoveredRevenue, 0),
+    recoveredOpportunities: points.reduce((sum, p) => sum + p.recoveredOpportunities, 0),
+  };
+}
 
 function scaleByRatio<T extends { recoveredRevenue: number; recoveredOpportunities: number }>(
   items: T[],
@@ -24,18 +31,20 @@ export class MockReportsService implements ReportsService {
   async getAdminReport(filters: ReportFilters = {}): Promise<AdminReport> {
     await delay(300);
 
-    const fullTimeline = mockAdminReport.revenueTimeline;
     const days = DAYS_BY_PRESET[filters.dateRange ?? "30D"];
-    const timeline = fullTimeline.slice(-days);
+    // The trailing 30 days back recoveryBySeller/recoveryByTreatment's ratio scaling
+    // (unchanged from before); the 30 days before that back the "vs período anterior"
+    // trend, so both fit inside the 60-day mock timeline.
+    const currentBaseline = mockRevenueTimeline60d.slice(-30);
+    const timeline = mockRevenueTimeline60d.slice(-days);
+    const previousTimeline = mockRevenueTimeline60d.slice(-days * 2, -days);
 
-    const fullRevenue = fullTimeline.reduce((sum, p) => sum + p.recoveredRevenue, 0);
-    const slicedRevenue = timeline.reduce((sum, p) => sum + p.recoveredRevenue, 0);
-    const ratio = fullRevenue > 0 ? slicedRevenue / fullRevenue : 0;
+    const current = sumRevenue(timeline);
+    const previous = sumRevenue(previousTimeline);
 
-    const recoveredOpportunities = timeline.reduce(
-      (sum, p) => sum + p.recoveredOpportunities,
-      0,
-    );
+    const fullRevenue = currentBaseline.reduce((sum, p) => sum + p.recoveredRevenue, 0);
+    const ratio = fullRevenue > 0 ? current.recoveredRevenue / fullRevenue : 0;
+
     // "At risk" and the recovery rate are current-pipeline snapshots, not derived from
     // the selected date range: we don't mock a "total lost" count to divide by, and
     // deriving the rate from recoveredOpportunities/atRiskOpportunities produced a
@@ -43,6 +52,8 @@ export class MockReportsService implements ReportsService {
     // for a 30-day cumulative count). Keep both fixed until real data exists.
     const atRiskOpportunities = mockAdminReport.summary.atRiskOpportunities;
     const recoveryRate = mockAdminReport.summary.recoveryRate;
+    const previousAtRiskOpportunities = mockAdminReport.summary.previousAtRiskOpportunities;
+    const previousRecoveryRate = mockAdminReport.summary.previousRecoveryRate;
 
     let recoveryBySeller: SellerMetric[] = scaleByRatio(mockAdminReport.recoveryBySeller, ratio);
     if (filters.sellerId) {
@@ -59,10 +70,14 @@ export class MockReportsService implements ReportsService {
 
     return {
       summary: {
-        recoveredRevenue: slicedRevenue,
-        recoveredOpportunities,
+        recoveredRevenue: current.recoveredRevenue,
+        recoveredOpportunities: current.recoveredOpportunities,
         recoveryRate,
         atRiskOpportunities,
+        previousRecoveredRevenue: previous.recoveredRevenue,
+        previousRecoveredOpportunities: previous.recoveredOpportunities,
+        previousRecoveryRate,
+        previousAtRiskOpportunities,
       },
       revenueTimeline: timeline,
       lossReasons: mockAdminReport.lossReasons,

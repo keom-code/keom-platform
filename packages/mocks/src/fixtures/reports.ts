@@ -1,10 +1,11 @@
 import type { AdminReport, RevenuePoint } from "@keom/contracts";
 
 /**
- * Deterministic 30-day revenue timeline ending 2026-09-14 (today, per the mock DNI
- * users' world). The reports mock service (apps/web) slices this per date-range
- * filter and derives the summary KPIs from the slice — this is the single source of
- * truth for anything date-dependent in the report.
+ * Deterministic 60-day revenue timeline ending 2026-09-14 (today, per the mock DNI
+ * users' world). The reports mock service (apps/web) slices the trailing 1/7/30 days
+ * per date-range filter and derives the summary KPIs from that slice; the 30 days
+ * before it back the "vs período anterior" trend indicators — this is the single
+ * source of truth for anything date-dependent in the report.
  */
 function buildRevenueTimeline(days: number): RevenuePoint[] {
   const points: RevenuePoint[] = [];
@@ -21,11 +22,14 @@ function buildRevenueTimeline(days: number): RevenuePoint[] {
   return points;
 }
 
-export const mockRevenueTimeline30d: RevenuePoint[] = buildRevenueTimeline(30);
+export const mockRevenueTimeline60d: RevenuePoint[] = buildRevenueTimeline(60);
+export const mockRevenueTimeline30d: RevenuePoint[] = mockRevenueTimeline60d.slice(-30);
+const mockRevenueTimelinePrevious30d: RevenuePoint[] = mockRevenueTimeline60d.slice(0, 30);
 
 /**
  * "At risk" is a current-pipeline snapshot, not a function of the selected date
  * range — see docs/ARCHITECTURE.md-adjacent note in apps/web/src/lib/services/reports.
+ * Its "previous" value below is yesterday's snapshot, not a 30-day-ago one.
  */
 export const mockAdminReport: AdminReport = {
   summary: {
@@ -36,6 +40,16 @@ export const mockAdminReport: AdminReport = {
     ),
     recoveryRate: 0.318,
     atRiskOpportunities: 17,
+    previousRecoveredRevenue: mockRevenueTimelinePrevious30d.reduce(
+      (sum, p) => sum + p.recoveredRevenue,
+      0,
+    ),
+    previousRecoveredOpportunities: mockRevenueTimelinePrevious30d.reduce(
+      (sum, p) => sum + p.recoveredOpportunities,
+      0,
+    ),
+    previousRecoveryRate: 0.288,
+    previousAtRiskOpportunities: 15,
   },
   revenueTimeline: mockRevenueTimeline30d,
   lossReasons: [

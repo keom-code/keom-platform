@@ -180,7 +180,10 @@ apps/web/
 
 /seller                         → redirect → /seller/alerts
 /seller/alerts                  SELLER only
-/seller/alerts/[alertId]        SELLER only — deep-link target for push notifications
+/seller/alerts?alertId={id}     SELLER only — push notifications deep-link here; AlertList
+                                 highlights + scrolls to the matching card (no separate
+                                 detail route — alert-card.tsx already renders full detail
+                                 inline)
 /seller/risk                    SELLER only
 
 /admin                          → redirect → /admin/reports
@@ -297,9 +300,9 @@ interface AuthService {
 - **Manifest:** `public/manifest.webmanifest` — name "KEOM", theme color matching the primary token, icons, `display: standalone`.
 - **Service worker:** Serwist, registered only in production builds (skip in dev to avoid caching-during-development pain). Precaches the app shell; runtime-caches nothing aggressive for MVP (this is a live dashboard, not an offline-first app — don't over-invest in offline strategy now).
 - **Permissions:** Notification permission requested from an explicit UI affordance (e.g. a toggle in ProfileMenu/settings), never an unsolicited browser prompt on load.
-- **Push subscription:** `lib/services/notifications` (`subscribe`/`unsubscribe`), posts the browser's `PushSubscription` (endpoint + keys) to `app/api/push/subscribe/route.ts` (stub for MVP — later forwards to `apps/api`, which owns actually sending pushes via VAPID + `web-push`).
-- **Mock notification strategy:** a dev-only "Simulate alert" trigger (visible only when `DATA_SOURCE=mock`) that creates a mock `SellerAlert` and posts a message to the active service worker, which fires a local `Notification` — validates the full click-routing path without needing a real push server.
-- **Notification click routing:** the service worker's `notificationclick` handler reads `data.url` (e.g. `/seller/alerts/{alertId}`) and calls `clients.openWindow`/focuses an existing tab and navigates — this logic is push-payload-shape-dependent, so `NotificationPayload` belongs in `packages/contracts` from the start even though push is a Phase 10 feature.
+- **Push subscription:** `lib/services/notifications` (`subscribe`/`unsubscribe`), reached via a `subscribeToPushAction` Server Action (same mutation pattern as everything else in the app — see Section O's warning against building Route-Handler/BFF layers "just in case") with a stub `PushSubscriptionPayload`; later forwards to `apps/api`, which owns actually sending pushes via VAPID + `web-push`.
+- **Mock notification strategy:** a "Simulate alert" trigger on `/seller/alerts`, gated on real preconditions (`Notification.permission === "granted"` and an active service worker registration) rather than an env flag — self-documenting in both `pnpm dev` (visible but explains it needs the production build) and `pnpm build && pnpm start` (fully functional). It calls `registration.showNotification()` directly with a real pending alert's data — validates the full click-routing path without needing a real push server.
+- **Notification click routing:** the service worker's `notificationclick` handler reads `data.url` (e.g. `/seller/alerts?alertId={id}`) and calls `clients.openWindow`/focuses an existing tab and navigates — this logic is push-payload-shape-dependent, so `NotificationPayload` belongs in `packages/contracts` from the start even though push is a Phase 10 feature.
 - **Backend integration path:** once `apps/api` can send real Web Push, nothing on the frontend changes except `DATA_SOURCE`/the subscribe endpoint target — the payload shape and click-routing logic were already built against the shared contract.
 
 ---

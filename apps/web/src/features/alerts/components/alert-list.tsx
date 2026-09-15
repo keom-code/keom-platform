@@ -1,11 +1,13 @@
 "use client";
 
+import { useSearchParams } from "next/navigation";
 import { CheckCircle2Icon } from "lucide-react";
 import { Skeleton } from "@keom/ui";
 import type { SellerAlert } from "@keom/contracts";
 import { PageHeader } from "@/components/shared/page-header";
 import { EmptyState } from "@/components/shared/empty-state";
 import { ErrorState } from "@/components/shared/error-state";
+import { NotificationDemoPanel } from "@/features/notifications/components/notification-demo-panel";
 import { useSellerAlerts } from "../hooks/use-seller-alerts";
 import { AlertCard } from "./alert-card";
 
@@ -29,6 +31,7 @@ function describeCount(count: number): string {
 export function AlertList() {
   const { data, status, refetch } = useSellerAlerts();
   const visibleAlerts = status === "success" ? data.filter(isVisible) : [];
+  const highlightedAlertId = useSearchParams().get("alertId");
 
   return (
     <div className="flex flex-col gap-6 p-4 md:p-8">
@@ -36,6 +39,8 @@ export function AlertList() {
         title="Necesitan tu atención"
         description={status === "success" ? describeCount(visibleAlerts.length) : undefined}
       />
+
+      {status === "success" && <NotificationDemoPanel alerts={visibleAlerts} />}
 
       {status === "pending" ? (
         <div className="flex flex-col gap-4">
@@ -54,7 +59,7 @@ export function AlertList() {
       ) : (
         <div className="flex flex-col gap-4">
           {visibleAlerts.map((alert) => (
-            <AlertCard key={alert.id} alert={alert} />
+            <AlertCard key={alert.id} alert={alert} highlighted={alert.id === highlightedAlertId} />
           ))}
         </div>
       )}

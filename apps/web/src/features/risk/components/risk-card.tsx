@@ -8,7 +8,7 @@ import { ScoreCircle } from "@/components/shared/score-circle";
 import { WhatsAppIcon } from "@/components/shared/whatsapp-icon";
 import { formatCurrency, formatRelativeTime, initials } from "@/lib/utils";
 
-const WHATSAPP_BUTTON_CLASSES = "bg-[#3BA65C] text-white hover:bg-[#359955]";
+const WHATSAPP_BUTTON_CLASSES = "bg-success text-white hover:bg-success/90";
 
 function openWhatsApp(url: string) {
   window.open(url, "_blank", "noopener,noreferrer");

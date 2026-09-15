@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { ClockIcon, FileTextIcon, UserRoundIcon } from "lucide-react";
 import {
   Avatar,
@@ -10,6 +11,7 @@ import {
   CardContent,
   CardFooter,
   CardHeader,
+  cn,
 } from "@keom/ui";
 import type { SellerAlert } from "@keom/contracts";
 import { LevelBadge } from "@/components/shared/level-badge";
@@ -29,9 +31,22 @@ function capitalize(text: string): string {
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
-export function AlertCard({ alert }: { alert: SellerAlert }) {
+export function AlertCard({
+  alert,
+  highlighted = false,
+}: {
+  alert: SellerAlert;
+  highlighted?: boolean;
+}) {
   const acknowledge = useAcknowledgeAlert();
   const fullName = `${alert.customer.firstName} ${alert.customer.lastName}`;
+  const cardRef = useRef<HTMLDivElement>(null);
+
+  // Scrolls to and highlights the alert a notification click deep-linked to — see
+  // /seller/alerts?alertId= handling in alert-list.tsx and docs/ARCHITECTURE.md Section J.
+  useEffect(() => {
+    if (highlighted) cardRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [highlighted]);
 
   function handlePrimaryAction() {
     acknowledge.mutate(alert.id);
@@ -39,7 +54,14 @@ export function AlertCard({ alert }: { alert: SellerAlert }) {
   }
 
   return (
-    <Card className="gap-0 p-0">
+    <Card
+      id={alert.id}
+      ref={cardRef}
+      className={cn(
+        "gap-0 p-0",
+        highlighted && "ring-2 ring-primary ring-offset-2 ring-offset-background",
+      )}
+    >
       <CardHeader className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 border-b border-border py-4">
         <div className="flex min-w-0 items-center gap-3">
           <Avatar>
@@ -99,7 +121,7 @@ export function AlertCard({ alert }: { alert: SellerAlert }) {
         <Button
           onClick={handlePrimaryAction}
           disabled={acknowledge.isPending}
-          className="h-12 w-full bg-[#3BA65C] text-base text-white hover:bg-[#359955]"
+          className="h-12 w-full bg-success text-base text-white hover:bg-success/90"
         >
           <WhatsAppIcon className="size-5" />
           {acknowledge.isPending ? "Procesando..." : "Abrir WhatsApp"}

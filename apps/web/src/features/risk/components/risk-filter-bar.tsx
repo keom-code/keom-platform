@@ -68,7 +68,10 @@ export function RiskFilterBar() {
       </div>
       <Select value={level} onValueChange={(value) => updateParam("level", value)}>
         <SelectTrigger
-          className={`h-11 w-36 gap-2 rounded-xl px-3 font-medium ${TRIGGER_CLASSES[level]}`}
+          // SelectTrigger sets its own height via `data-[size=default]:h-8` (higher
+          // specificity than a bare class), so a plain `h-11` here is silently
+          // overridden — must match that same variant to actually take effect.
+          className={`data-[size=default]:h-11 w-36 gap-2 rounded-xl px-3 font-medium ${TRIGGER_CLASSES[level]}`}
           aria-label="Nivel de riesgo"
         >
           <SelectValue>
