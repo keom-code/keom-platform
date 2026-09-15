@@ -1,0 +1,42 @@
+- generic [ref=f16e1]:
+  - generic [ref=f16e2]:
+    - banner [ref=f16e3]:
+      - link "KEOM" [ref=f16e4] [cursor=pointer]:
+        - /url: /seller/alerts
+      - generic [ref=f16e5]:
+        - button "Cambiar a modo claro" [active] [ref=f16e76]
+        - button "Menú de perfil" [ref=f16e8]:
+          - generic [ref=f16e9]: CR
+    - generic [ref=f16e11]:
+      - navigation "Navegación principal" [ref=f16e12]:
+        - link "Alertas" [ref=f16e13] [cursor=pointer]:
+          - /url: /seller/alerts
+        - link "Riesgo" [ref=f16e17] [cursor=pointer]:
+          - /url: /seller/risk
+      - main [ref=f16e21]:
+        - generic [ref=f16e22]:
+          - generic [ref=f16e23]:
+            - heading "Necesitan tu atención" [level=1] [ref=f16e24]
+            - paragraph [ref=f16e38]: 1 oportunidad necesita una acción
+          - generic [ref=f16e39]:
+            - generic [ref=f16e40]:
+              - generic [ref=f16e41]:
+                - generic [ref=f16e42]: JP
+                - generic [ref=f16e44]:
+                  - paragraph [ref=f16e45]: Juan Pérez
+                  - paragraph [ref=f16e46]: "+51999111222"
+              - generic [ref=f16e48]: Alto
+              - generic [ref=f16e53]:
+                - generic [ref=f16e54]: "Valor potencial:"
+                - generic [ref=f16e55]: S/ 1,200
+            - generic [ref=f16e56]:
+              - generic [ref=f16e57]:
+                - generic [ref=f16e58]: Resumen
+                - paragraph [ref=f16e62]: Juan preguntó por depilación láser. KEOM recuperó la conversación explicando opciones de pago. Juan ahora quiere reservar para mañana.
+              - generic [ref=f16e63]:
+                - generic [ref=f16e64]: Necesita de ti
+                - paragraph [ref=f16e68]: Confirmar horario disponible.
+              - generic [ref=f16e69]: hace 9 horas
+            - button "Abrir WhatsApp" [ref=f16e74]
+  - button "Open Next.js Dev Tools" [ref=f16e34] [cursor=pointer]
+  - alert [ref=f16e75]

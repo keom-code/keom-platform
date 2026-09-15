@@ -1,0 +1,42 @@
+- generic [ref=f13e1]:
+  - generic [ref=f13e2]:
+    - banner [ref=f13e3]:
+      - link "KEOM" [ref=f13e4] [cursor=pointer]:
+        - /url: /seller/alerts
+      - generic [ref=f13e5]:
+        - button "Cambiar a modo oscuro" [active] [ref=f13e78]
+        - button "Menú de perfil" [ref=f13e8]:
+          - generic [ref=f13e9]: CR
+    - generic [ref=f13e11]:
+      - navigation "Navegación principal" [ref=f13e12]:
+        - link "Alertas" [ref=f13e13] [cursor=pointer]:
+          - /url: /seller/alerts
+        - link "Riesgo" [ref=f13e17] [cursor=pointer]:
+          - /url: /seller/risk
+      - main [ref=f13e21]:
+        - generic [ref=f13e22]:
+          - generic [ref=f13e23]:
+            - heading "Necesitan tu atención" [level=1] [ref=f13e24]
+            - paragraph [ref=f13e39]: 1 oportunidad necesita una acción
+          - generic [ref=f13e40]:
+            - generic [ref=f13e41]:
+              - generic [ref=f13e42]:
+                - generic [ref=f13e43]: JP
+                - generic [ref=f13e45]:
+                  - paragraph [ref=f13e46]: Juan Pérez
+                  - paragraph [ref=f13e47]: "+51999111222"
+              - generic [ref=f13e49]: Alto
+              - paragraph [ref=f13e53]: "Valor potencial: S/ 1,200"
+            - generic [ref=f13e54]:
+              - generic [ref=f13e55]:
+                - generic [ref=f13e56]: Resumen
+                - paragraph [ref=f13e60]: Juan preguntó por depilación láser. KEOM recuperó la conversación explicando opciones de pago. Juan ahora quiere reservar para mañana.
+              - generic [ref=f13e61]:
+                - generic [ref=f13e62]: Necesita de ti
+                - paragraph [ref=f13e66]: Confirmar horario disponible.
+              - generic [ref=f13e67]:
+                - generic [ref=f13e68]: hace 9 horas
+                - button "Ver conversación" [ref=f13e72]
+            - button "Abrir WhatsApp" [ref=f13e76]
+  - button "Open Next.js Dev Tools" [ref=f13e34] [cursor=pointer]
+  - alert [ref=f13e77]

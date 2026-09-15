@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { SearchIcon } from "lucide-react";
 import {
   Input,
   Select,
@@ -10,13 +11,21 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@keom/ui";
+import { LEVEL_CONFIG, type Level } from "@/components/shared/level-badge";
 
-const LEVEL_OPTIONS = [
+const LEVEL_OPTIONS: { value: "all" | Level; label: string }[] = [
   { value: "all", label: "Todos" },
-  { value: "HIGH", label: "Alto" },
-  { value: "MEDIUM", label: "Medio" },
-  { value: "LOW", label: "Bajo" },
+  { value: "HIGH", label: LEVEL_CONFIG.HIGH.label },
+  { value: "MEDIUM", label: LEVEL_CONFIG.MEDIUM.label },
+  { value: "LOW", label: LEVEL_CONFIG.LOW.label },
 ];
+
+const TRIGGER_CLASSES: Record<"all" | Level, string> = {
+  all: "border-input bg-transparent",
+  HIGH: "border-risk-high-border bg-risk-high-bg text-risk-high-fg",
+  MEDIUM: "border-risk-medium-border bg-risk-medium-bg text-risk-medium-fg",
+  LOW: "border-risk-low-border bg-risk-low-bg text-risk-low-fg",
+};
 
 export function RiskFilterBar() {
   const router = useRouter();
@@ -24,6 +33,7 @@ export function RiskFilterBar() {
   const searchParams = useSearchParams();
   const [, startTransition] = useTransition();
   const [searchInput, setSearchInput] = useState(searchParams.get("search") ?? "");
+  const level = (searchParams.get("level") ?? "all") as "all" | Level;
 
   function updateParam(key: string, value: string | null) {
     const params = new URLSearchParams(searchParams);
@@ -46,19 +56,32 @@ export function RiskFilterBar() {
 
   return (
     <div className="flex flex-wrap gap-3">
-      <Input
-        placeholder="Buscar cliente..."
-        value={searchInput}
-        onChange={(event) => setSearchInput(event.target.value)}
-        className="max-w-56"
-      />
-      <Select
-        value={searchParams.get("level") ?? "all"}
-        onValueChange={(value) => updateParam("level", value)}
-      >
-        <SelectTrigger className="w-32">
+      <div className="relative max-w-72 flex-1">
+        <SearchIcon className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          placeholder="Buscar cliente..."
+          aria-label="Buscar cliente"
+          value={searchInput}
+          onChange={(event) => setSearchInput(event.target.value)}
+          className="h-11 rounded-xl pl-9"
+        />
+      </div>
+      <Select value={level} onValueChange={(value) => updateParam("level", value)}>
+        <SelectTrigger
+          className={`h-11 w-36 gap-2 rounded-xl px-3 font-medium ${TRIGGER_CLASSES[level]}`}
+          aria-label="Nivel de riesgo"
+        >
           <SelectValue>
-            {(value: string) => LEVEL_OPTIONS.find((option) => option.value === value)?.label}
+            {(value: string) => {
+              const option = value as "all" | Level;
+              const Icon = option === "all" ? undefined : LEVEL_CONFIG[option].icon;
+              return (
+                <>
+                  {Icon ? <Icon className="size-4" /> : null}
+                  {LEVEL_OPTIONS.find((o) => o.value === option)?.label}
+                </>
+              );
+            }}
           </SelectValue>
         </SelectTrigger>
         <SelectContent>

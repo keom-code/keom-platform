@@ -13,6 +13,7 @@ export type ReportSummary = z.infer<typeof ReportSummarySchema>;
 export const RevenuePointSchema = z.object({
   date: IsoDateStringSchema,
   recoveredRevenue: MoneySchema,
+  recoveredOpportunities: z.number().int().nonnegative(),
 });
 export type RevenuePoint = z.infer<typeof RevenuePointSchema>;
 

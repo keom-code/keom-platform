@@ -22,8 +22,8 @@ function isVisible(alert: SellerAlert): boolean {
 function describeCount(count: number): string {
   if (count === 0) return "No hay oportunidades pendientes.";
   const noun = count === 1 ? "oportunidad" : "oportunidades";
-  const verb = count === 1 ? "necesita" : "necesitan";
-  return `${count} ${noun} ${verb} una acción`;
+  const verb = count === 1 ? "requiere" : "requieren";
+  return `${count} ${noun} ${verb} una acción humana`;
 }
 
 export function AlertList() {

@@ -67,3 +67,13 @@ export {
   DropdownMenuSubTrigger,
   DropdownMenuSubContent,
 } from "./components/ui/dropdown-menu";
+export {
+  Table,
+  TableHeader,
+  TableBody,
+  TableFooter,
+  TableHead,
+  TableRow,
+  TableCell,
+  TableCaption,
+} from "./components/ui/table";

@@ -12,7 +12,9 @@ export const CustomerRiskSchema = z.object({
   riskLevel: RiskLevelSchema,
   riskScore: z.number().min(0).max(100),
   reason: z.string(),
+  nextBestAction: z.string(),
   opportunityValue: MoneySchema.optional(),
   lastActivityAt: IsoDateStringSchema,
+  whatsappUrl: z.string().url(),
 });
 export type CustomerRisk = z.infer<typeof CustomerRiskSchema>;

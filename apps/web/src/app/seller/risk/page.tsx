@@ -35,7 +35,7 @@ export default async function SellerRiskPage({
           description="No hay clientes que coincidan con el filtro."
         />
       ) : (
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-5">
           {risks.map((risk) => (
             <RiskCard key={risk.customerId} risk={risk} />
           ))}

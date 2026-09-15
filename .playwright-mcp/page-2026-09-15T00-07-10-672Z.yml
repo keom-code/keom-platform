@@ -1,0 +1,78 @@
+- generic [active] [ref=f23e1]:
+  - generic [ref=f23e2]:
+    - banner [ref=f23e3]:
+      - link "KEOM" [ref=f23e4] [cursor=pointer]:
+        - /url: /seller/alerts
+      - generic [ref=f23e5]:
+        - button "Cambiar a modo oscuro" [ref=f23e6]
+        - button "Menú de perfil" [ref=f23e8]:
+          - generic [ref=f23e9]: CR
+    - main [ref=f23e12]:
+      - generic [ref=f23e13]:
+        - heading "Clientes en riesgo" [level=1] [ref=f23e15]
+        - generic [ref=f23e16]:
+          - textbox "Buscar cliente" [ref=f23e18]:
+            - /placeholder: Buscar cliente...
+          - combobox "Nivel de riesgo" [ref=f23e19]:
+            - generic [ref=f23e20]: Alto
+            - img [aria-hidden]: ▼
+          - textbox [aria-hidden] [ref=f23e21]: HIGH
+        - generic [ref=f23e22]:
+          - generic [ref=f23e24]:
+            - generic [ref=f23e25]:
+              - generic [ref=f23e26]:
+                - generic [ref=f23e27]: LF
+                - generic [ref=f23e29]:
+                  - generic [ref=f23e30]:
+                    - paragraph [ref=f23e31]: Luis Fernández
+                    - generic [ref=f23e32]: Alto
+                  - paragraph [ref=f23e35]: Limpieza facial
+              - generic [ref=f23e40]:
+                - paragraph [ref=f23e41]: Sin seguimiento por 4 días
+                - paragraph [ref=f23e42]: "Último mensaje: hace 5 días"
+            - generic [ref=f23e48]:
+              - paragraph [ref=f23e49]: Siguiente mejor acción
+              - paragraph [ref=f23e50]: Retomar conversación y ofrecer disponibilidad esta semana.
+            - generic [ref=f23e51]:
+              - generic [ref=f23e56]:
+                - paragraph [ref=f23e57]: Valor potencial
+                - paragraph [ref=f23e58]: S/ 350
+              - generic [ref=f23e59]:
+                - 'img "Puntaje de riesgo: 88 de 100" [ref=f23e60]':
+                  - generic [ref=f23e61]: "88"
+                - generic [ref=f23e62]: Puntaje
+            - generic [ref=f23e63]:
+              - button "Ver conversación" [ref=f23e64]
+              - button "Abrir WhatsApp" [ref=f23e67]
+          - generic [ref=f23e69]:
+            - generic [ref=f23e70]:
+              - generic [ref=f23e71]:
+                - generic [ref=f23e72]: JM
+                - generic [ref=f23e74]:
+                  - generic [ref=f23e75]:
+                    - paragraph [ref=f23e76]: Javier Morales
+                    - generic [ref=f23e77]: Alto
+                  - paragraph [ref=f23e80]: Tratamiento capilar
+              - generic [ref=f23e85]:
+                - paragraph [ref=f23e86]: Canceló su última cita
+                - paragraph [ref=f23e87]: "Último mensaje: hace 8 días"
+            - generic [ref=f23e93]:
+              - paragraph [ref=f23e94]: Siguiente mejor acción
+              - paragraph [ref=f23e95]: Contactar para entender motivo de cancelación y reactivar.
+            - generic [ref=f23e96]:
+              - generic [ref=f23e101]:
+                - paragraph [ref=f23e102]: Valor potencial
+                - paragraph [ref=f23e103]: S/ 620
+              - generic [ref=f23e104]:
+                - 'img "Puntaje de riesgo: 76 de 100" [ref=f23e105]':
+                  - generic [ref=f23e106]: "76"
+                - generic [ref=f23e107]: Puntaje
+            - generic [ref=f23e108]:
+              - button "Ver conversación" [ref=f23e109]
+              - button "Abrir WhatsApp" [ref=f23e112]
+    - navigation "Navegación principal" [ref=f23e113]:
+      - link "Alertas" [ref=f23e114] [cursor=pointer]:
+        - /url: /seller/alerts
+      - link "Riesgo" [ref=f23e118] [cursor=pointer]:
+        - /url: /seller/risk
+  - button "Open Next.js Dev Tools" [ref=f23e127] [cursor=pointer]

@@ -1,0 +1,18 @@
+- generic [active] [ref=f16e1]:
+  - generic [ref=f16e2]:
+    - banner [ref=f16e3]:
+      - link "KEOM" [ref=f16e4] [cursor=pointer]:
+        - /url: /seller/alerts
+      - generic [ref=f16e5]:
+        - button "Cambiar a modo oscuro" [ref=f16e6]
+        - button "Menú de perfil" [ref=f16e8]:
+          - generic [ref=f16e9]: CR
+    - generic [ref=f16e11]:
+      - navigation "Navegación principal" [ref=f16e12]:
+        - link "Alertas" [ref=f16e13] [cursor=pointer]:
+          - /url: /seller/alerts
+        - link "Riesgo" [ref=f16e17] [cursor=pointer]:
+          - /url: /seller/risk
+      - main [ref=f16e21]:
+        - heading "Necesitan tu atención" [level=1] [ref=f16e24]
+  - button "Open Next.js Dev Tools" [ref=f16e34] [cursor=pointer]

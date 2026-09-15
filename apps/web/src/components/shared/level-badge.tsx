@@ -3,7 +3,7 @@ import { cn } from "@keom/ui";
 
 export type Level = "HIGH" | "MEDIUM" | "LOW";
 
-const LEVEL_CONFIG: Record<Level, { label: string; icon: LucideIcon; classes: string }> = {
+export const LEVEL_CONFIG: Record<Level, { label: string; icon: LucideIcon; classes: string }> = {
   HIGH: {
     label: "Alto",
     icon: AlertTriangleIcon,
