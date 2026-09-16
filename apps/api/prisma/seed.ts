@@ -3,8 +3,8 @@ import { WHATSAPP_DEMO_PHONE_NUMBER_ID, WHATSAPP_DEMO_WABA_ID } from "@keom/mock
 
 const prisma = new PrismaClient();
 
-const DEMO_COMPANY_ID = "demo-company-clinica";
-const DEMO_INTEGRATION_ID = "demo-integration-whatsapp";
+const DEMO_COMPANY_ID = "00000000-0000-4000-8000-000000000001";
+const DEMO_INTEGRATION_ID = "00000000-0000-4000-8000-000000000002";
 
 async function main() {
   const company = await prisma.company.upsert({

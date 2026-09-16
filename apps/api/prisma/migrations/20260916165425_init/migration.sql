@@ -1,124 +1,124 @@
 -- CreateEnum
-CREATE TYPE "Provider" AS ENUM ('WHATSAPP');
+CREATE TYPE "provider" AS ENUM ('WHATSAPP');
 
 -- CreateEnum
-CREATE TYPE "MessageDirection" AS ENUM ('INBOUND', 'OUTBOUND');
+CREATE TYPE "message_direction" AS ENUM ('INBOUND', 'OUTBOUND');
 
 -- CreateTable
-CREATE TABLE "Company" (
-    "id" TEXT NOT NULL,
+CREATE TABLE "company" (
+    "id" UUID NOT NULL,
     "name" TEXT NOT NULL,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" TIMESTAMP(3) NOT NULL,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
 
-    CONSTRAINT "Company_pkey" PRIMARY KEY ("id")
+    CONSTRAINT "company_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
-CREATE TABLE "Integration" (
-    "id" TEXT NOT NULL,
-    "companyId" TEXT NOT NULL,
-    "provider" "Provider" NOT NULL,
-    "wabaId" TEXT,
-    "phoneNumberId" TEXT NOT NULL,
+CREATE TABLE "integration" (
+    "id" UUID NOT NULL,
+    "company_id" UUID NOT NULL,
+    "provider" "provider" NOT NULL,
+    "waba_id" TEXT,
+    "phone_number_id" TEXT NOT NULL,
     "status" TEXT NOT NULL DEFAULT 'ACTIVE',
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" TIMESTAMP(3) NOT NULL,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
 
-    CONSTRAINT "Integration_pkey" PRIMARY KEY ("id")
+    CONSTRAINT "integration_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
-CREATE TABLE "RawEvent" (
-    "id" TEXT NOT NULL,
-    "companyId" TEXT,
-    "provider" "Provider" NOT NULL,
-    "eventType" TEXT NOT NULL,
-    "externalEventId" TEXT,
+CREATE TABLE "raw_event" (
+    "id" UUID NOT NULL,
+    "company_id" UUID,
+    "provider" "provider" NOT NULL,
+    "event_type" TEXT NOT NULL,
+    "external_event_id" TEXT,
     "payload" JSONB NOT NULL,
     "status" TEXT NOT NULL DEFAULT 'RECEIVED',
-    "receivedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "processedAt" TIMESTAMP(3),
+    "received_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "processed_at" TIMESTAMP(3),
 
-    CONSTRAINT "RawEvent_pkey" PRIMARY KEY ("id")
+    CONSTRAINT "raw_event_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
-CREATE TABLE "Customer" (
-    "id" TEXT NOT NULL,
-    "companyId" TEXT NOT NULL,
-    "externalId" TEXT NOT NULL,
+CREATE TABLE "customer" (
+    "id" UUID NOT NULL,
+    "company_id" UUID NOT NULL,
+    "external_id" TEXT NOT NULL,
     "name" TEXT,
     "phone" TEXT,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" TIMESTAMP(3) NOT NULL,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
 
-    CONSTRAINT "Customer_pkey" PRIMARY KEY ("id")
+    CONSTRAINT "customer_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
-CREATE TABLE "Conversation" (
-    "id" TEXT NOT NULL,
-    "companyId" TEXT NOT NULL,
-    "customerId" TEXT NOT NULL,
-    "channel" "Provider" NOT NULL,
-    "externalId" TEXT,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" TIMESTAMP(3) NOT NULL,
+CREATE TABLE "conversation" (
+    "id" UUID NOT NULL,
+    "company_id" UUID NOT NULL,
+    "customer_id" UUID NOT NULL,
+    "channel" "provider" NOT NULL,
+    "external_id" TEXT,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
 
-    CONSTRAINT "Conversation_pkey" PRIMARY KEY ("id")
+    CONSTRAINT "conversation_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
-CREATE TABLE "Message" (
-    "id" TEXT NOT NULL,
-    "companyId" TEXT NOT NULL,
-    "conversationId" TEXT NOT NULL,
-    "externalMessageId" TEXT NOT NULL,
-    "direction" "MessageDirection" NOT NULL,
+CREATE TABLE "message" (
+    "id" UUID NOT NULL,
+    "company_id" UUID NOT NULL,
+    "conversation_id" UUID NOT NULL,
+    "external_message_id" TEXT NOT NULL,
+    "direction" "message_direction" NOT NULL,
     "type" TEXT NOT NULL,
     "text" TEXT,
-    "sentAt" TIMESTAMP(3) NOT NULL,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "sent_at" TIMESTAMP(3) NOT NULL,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
-    CONSTRAINT "Message_pkey" PRIMARY KEY ("id")
+    CONSTRAINT "message_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateIndex
-CREATE UNIQUE INDEX "Integration_phoneNumberId_key" ON "Integration"("phoneNumberId");
+CREATE UNIQUE INDEX "integration_phone_number_id_key" ON "integration"("phone_number_id");
 
 -- CreateIndex
-CREATE INDEX "Integration_companyId_idx" ON "Integration"("companyId");
+CREATE INDEX "integration_company_id_idx" ON "integration"("company_id");
 
 -- CreateIndex
-CREATE INDEX "RawEvent_companyId_idx" ON "RawEvent"("companyId");
+CREATE INDEX "raw_event_company_id_idx" ON "raw_event"("company_id");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "Customer_companyId_externalId_key" ON "Customer"("companyId", "externalId");
+CREATE UNIQUE INDEX "customer_company_id_external_id_key" ON "customer"("company_id", "external_id");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "Conversation_companyId_customerId_channel_key" ON "Conversation"("companyId", "customerId", "channel");
+CREATE UNIQUE INDEX "conversation_company_id_customer_id_channel_key" ON "conversation"("company_id", "customer_id", "channel");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "Message_companyId_externalMessageId_key" ON "Message"("companyId", "externalMessageId");
+CREATE UNIQUE INDEX "message_company_id_external_message_id_key" ON "message"("company_id", "external_message_id");
 
 -- AddForeignKey
-ALTER TABLE "Integration" ADD CONSTRAINT "Integration_companyId_fkey" FOREIGN KEY ("companyId") REFERENCES "Company"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "integration" ADD CONSTRAINT "integration_company_id_fkey" FOREIGN KEY ("company_id") REFERENCES "company"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "RawEvent" ADD CONSTRAINT "RawEvent_companyId_fkey" FOREIGN KEY ("companyId") REFERENCES "Company"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "raw_event" ADD CONSTRAINT "raw_event_company_id_fkey" FOREIGN KEY ("company_id") REFERENCES "company"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "Customer" ADD CONSTRAINT "Customer_companyId_fkey" FOREIGN KEY ("companyId") REFERENCES "Company"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "customer" ADD CONSTRAINT "customer_company_id_fkey" FOREIGN KEY ("company_id") REFERENCES "company"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "Conversation" ADD CONSTRAINT "Conversation_companyId_fkey" FOREIGN KEY ("companyId") REFERENCES "Company"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "conversation" ADD CONSTRAINT "conversation_company_id_fkey" FOREIGN KEY ("company_id") REFERENCES "company"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "Conversation" ADD CONSTRAINT "Conversation_customerId_fkey" FOREIGN KEY ("customerId") REFERENCES "Customer"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "conversation" ADD CONSTRAINT "conversation_customer_id_fkey" FOREIGN KEY ("customer_id") REFERENCES "customer"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "Message" ADD CONSTRAINT "Message_companyId_fkey" FOREIGN KEY ("companyId") REFERENCES "Company"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "message" ADD CONSTRAINT "message_company_id_fkey" FOREIGN KEY ("company_id") REFERENCES "company"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "Message" ADD CONSTRAINT "Message_conversationId_fkey" FOREIGN KEY ("conversationId") REFERENCES "Conversation"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "message" ADD CONSTRAINT "message_conversation_id_fkey" FOREIGN KEY ("conversation_id") REFERENCES "conversation"("id") ON DELETE RESTRICT ON UPDATE CASCADE;

@@ -9,101 +9,112 @@ datasource db {
 
 enum Provider {
   WHATSAPP
+
+  @@map("provider")
 }
 
 enum MessageDirection {
   INBOUND
   OUTBOUND
+
+  @@map("message_direction")
 }
 
 model Company {
-  id            String         @id @default(cuid())
+  id            String         @id @default(uuid()) @db.Uuid
   name          String
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  createdAt     DateTime       @default(now()) @map("created_at")
+  updatedAt     DateTime       @updatedAt @map("updated_at")
   integrations  Integration[]
   customers     Customer[]
   conversations Conversation[]
   messages      Message[]
   rawEvents     RawEvent[]
+
+  @@map("company")
 }
 
 model Integration {
-  id            String   @id @default(cuid())
-  companyId     String
+  id            String   @id @default(uuid()) @db.Uuid
+  companyId     String   @map("company_id") @db.Uuid
   company       Company  @relation(fields: [companyId], references: [id])
   provider      Provider
-  wabaId        String?
-  phoneNumberId String   @unique
+  wabaId        String?  @map("waba_id")
+  phoneNumberId String   @unique @map("phone_number_id")
   status        String   @default("ACTIVE")
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
 
   @@index([companyId])
+  @@map("integration")
 }
 
 /// Original inbound provider payload, stored verbatim for debugging/auditing/reprocessing.
 /// companyId is nullable: an event from an unrecognized phoneNumberId is still stored for
 /// investigation, just without tenant attribution.
 model RawEvent {
-  id              String    @id @default(cuid())
-  companyId       String?
+  id              String    @id @default(uuid()) @db.Uuid
+  companyId       String?   @map("company_id") @db.Uuid
   company         Company?  @relation(fields: [companyId], references: [id])
   provider        Provider
-  eventType       String
-  externalEventId String?
+  eventType       String    @map("event_type")
+  externalEventId String?   @map("external_event_id")
   payload         Json
   status          String    @default("RECEIVED")
-  receivedAt      DateTime  @default(now())
-  processedAt     DateTime?
+  receivedAt      DateTime  @default(now()) @map("received_at")
+  processedAt     DateTime? @map("processed_at")
 
   @@index([companyId])
+  @@map("raw_event")
 }
 
 model Customer {
-  id            String         @id @default(cuid())
-  companyId     String
+  id            String         @id @default(uuid()) @db.Uuid
+  companyId     String         @map("company_id") @db.Uuid
   company       Company        @relation(fields: [companyId], references: [id])
-  externalId    String
+  externalId    String         @map("external_id")
   name          String?
   phone         String?
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  createdAt     DateTime       @default(now()) @map("created_at")
+  updatedAt     DateTime       @updatedAt @map("updated_at")
   conversations Conversation[]
 
   @@unique([companyId, externalId])
+  @@map("customer")
 }
 
 model Conversation {
-  id         String    @id @default(cuid())
-  companyId  String
+  id         String    @id @default(uuid()) @db.Uuid
+  companyId  String    @map("company_id") @db.Uuid
   company    Company   @relation(fields: [companyId], references: [id])
-  customerId String
+  customerId String    @map("customer_id") @db.Uuid
   customer   Customer  @relation(fields: [customerId], references: [id])
   channel    Provider
-  externalId String?
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
+  externalId String?   @map("external_id")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
   messages   Message[]
 
   @@unique([companyId, customerId, channel])
+  @@map("conversation")
 }
 
 /// externalMessageId + companyId is the idempotency key: Meta may redeliver the same
 /// webhook, and this unique constraint is what turns a duplicate POST into a no-op
 /// instead of a duplicate row.
 model Message {
-  id                String           @id @default(cuid())
-  companyId         String
+  id                String           @id @default(uuid()) @db.Uuid
+  companyId         String           @map("company_id") @db.Uuid
   company           Company          @relation(fields: [companyId], references: [id])
-  conversationId    String
+  conversationId    String           @map("conversation_id") @db.Uuid
   conversation      Conversation     @relation(fields: [conversationId], references: [id])
-  externalMessageId String
+  externalMessageId String           @map("external_message_id")
   direction         MessageDirection
   type              String
   text              String?
-  sentAt            DateTime
-  createdAt         DateTime         @default(now())
+  sentAt            DateTime         @map("sent_at")
+  createdAt         DateTime         @default(now()) @map("created_at")
 
   @@unique([companyId, externalMessageId])
+  @@map("message")
 }

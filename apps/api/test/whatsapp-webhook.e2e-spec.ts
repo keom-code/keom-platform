@@ -6,8 +6,8 @@ import request from "supertest";
 import { AppModule } from "../src/app.module";
 import { PrismaService } from "../src/prisma/prisma.service";
 
-const TEST_COMPANY_ID = "e2e-test-company";
-const TEST_INTEGRATION_ID = "e2e-test-integration";
+const TEST_COMPANY_ID = "00000000-0000-4000-8000-0000000000e2";
+const TEST_INTEGRATION_ID = "00000000-0000-4000-8000-0000000000e3";
 // Dedicated phoneNumberId, distinct from the seeded demo Integration's — this test
 // creates and tears down its own Integration and must never touch seed data.
 const TEST_PHONE_NUMBER_ID = "199999999999999";
