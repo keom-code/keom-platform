@@ -15,7 +15,7 @@ describe("IngestionService", () => {
   let service: IngestionService;
   let prisma: {
     rawEvent: { create: jest.Mock };
-    integration: { findUnique: jest.Mock };
+    integration: { findMany: jest.Mock };
     customer: { upsert: jest.Mock };
     conversation: { upsert: jest.Mock };
     message: { create: jest.Mock };
@@ -45,7 +45,7 @@ describe("IngestionService", () => {
     prisma = {
       rawEvent: { create: jest.fn().mockResolvedValue({ id: "raw-1" }) },
       integration: {
-        findUnique: jest.fn().mockResolvedValue({ company: { id: COMPANY_ID } }),
+        findMany: jest.fn().mockResolvedValue([{ phoneNumberId: PHONE_NUMBER_ID, company: { id: COMPANY_ID } }]),
       },
       customer: { upsert: jest.fn().mockResolvedValue({ id: "customer-1" }) },
       conversation: { upsert: jest.fn().mockResolvedValue({ id: "conversation-1" }) },
@@ -62,8 +62,8 @@ describe("IngestionService", () => {
   it("resolves the company via the Integration's phoneNumberId and persists RawEvent, Customer, Conversation, Message", async () => {
     await service.ingestEvent(event);
 
-    expect(prisma.integration.findUnique).toHaveBeenCalledWith({
-      where: { phoneNumberId: PHONE_NUMBER_ID },
+    expect(prisma.integration.findMany).toHaveBeenCalledWith({
+      where: { phoneNumberId: { in: [PHONE_NUMBER_ID] } },
       include: { company: true },
     });
 
@@ -102,7 +102,7 @@ describe("IngestionService", () => {
   });
 
   it("skips domain persistence but still records RawEvent when the phoneNumberId is unknown", async () => {
-    prisma.integration.findUnique.mockResolvedValue(null);
+    prisma.integration.findMany.mockResolvedValue([]);
 
     await service.ingestEvent(event);
 
