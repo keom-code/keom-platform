@@ -1,0 +1,25 @@
+{
+  "extends": "@keom/config/typescript/base.json",
+  "compilerOptions": {
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "target": "ES2021",
+    "lib": ["ES2021"],
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    "outDir": "./dist",
+    "declaration": true,
+    "sourceMap": true,
+    "noEmit": false,
+    "baseUrl": ".",
+    // @keom/mocks and @keom/contracts use "moduleResolution": "Bundler" (package.json
+    // "exports" field), which classic "Node" resolution (required here for Nest's
+    // CommonJS toolchain) can't follow. Pointing directly at the one fixture module
+    // apps/api actually consumes avoids pulling in the rest of @keom/mocks' fixture
+    // tree (which imports @keom/contracts and would hit the same resolution gap).
+    "paths": {
+      "@keom/mocks": ["../../packages/mocks/src/fixtures/whatsapp/received-text-message.ts"]
+    }
+  },
+  "include": ["src", "prisma", "test"]
+}
