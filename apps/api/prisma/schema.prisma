@@ -20,6 +20,74 @@ enum MessageDirection {
   @@map("message_direction")
 }
 
+/// M2A: where an Opportunity is commercially, per docs/ARCHITECTURE.md-style deterministic
+/// rules (see apps/api/README.md M2A section). Deliberately has no terminal state
+/// (WON/LOST/RECOVERED) yet — a NO_LONGER_INTERESTED signal deactivates the Opportunity
+/// (see Opportunity.isActive) instead of moving it to a terminal state. A later milestone
+/// should introduce real lifecycle states once outcomes are tracked.
+enum OpportunityState {
+  NEW
+  ENGAGED
+  HIGH_INTENT
+  AT_RISK
+
+  @@map("opportunity_state")
+}
+
+/// Shared LOW/MEDIUM/HIGH scale reused for RiskLevel, Priority and InterestLevel.
+enum RiskLevel {
+  LOW
+  MEDIUM
+  HIGH
+
+  @@map("risk_level")
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+
+  @@map("priority")
+}
+
+enum InterestLevel {
+  LOW
+  MEDIUM
+  HIGH
+
+  @@map("interest_level")
+}
+
+/// Deterministic, structured commercial signals fed into the Opportunity engine (M2A).
+/// Supplied as input for now (fixtures/dev endpoint/tests) — inferring these from
+/// Message.text via an LLM is M2B, not M2A.
+enum SignalType {
+  PRICING_REQUESTED
+  AVAILABILITY_REQUESTED
+  BOOKING_INTENT
+  PURCHASE_INTENT
+  QUOTE_REQUESTED
+  PAYMENT_QUESTION
+  FOLLOW_UP_REQUESTED
+  OBJECTION
+  NO_LONGER_INTERESTED
+
+  @@map("signal_type")
+}
+
+enum NextBestAction {
+  RESPOND
+  SEND_INFORMATION
+  ASK_QUESTION
+  OFFER_APPOINTMENT
+  FOLLOW_UP
+  WAIT
+  ESCALATE_TO_HUMAN
+
+  @@map("next_best_action")
+}
+
 model Company {
   id            String         @id @default(uuid()) @db.Uuid
   name          String
@@ -30,6 +98,7 @@ model Company {
   conversations Conversation[]
   messages      Message[]
   rawEvents     RawEvent[]
+  opportunities Opportunity[]
 
   @@map("company")
 }
@@ -78,6 +147,7 @@ model Customer {
   createdAt     DateTime       @default(now()) @map("created_at")
   updatedAt     DateTime       @updatedAt @map("updated_at")
   conversations Conversation[]
+  opportunities Opportunity[]
 
   @@unique([companyId, externalId])
   @@map("customer")
@@ -94,6 +164,7 @@ model Conversation {
   createdAt  DateTime  @default(now()) @map("created_at")
   updatedAt  DateTime  @updatedAt @map("updated_at")
   messages   Message[]
+  opportunities Opportunity[]
 
   @@unique([companyId, customerId, channel])
   @@map("conversation")
@@ -117,4 +188,79 @@ model Message {
 
   @@unique([companyId, externalMessageId])
   @@map("message")
+}
+
+/// M2A deterministic Opportunity Engine. No unique constraint tying this to one
+/// Conversation on purpose: multiple opportunities (sequential or, later, concurrent)
+/// may exist per conversation. `isActive` is the MVP mechanism for "the one currently
+/// relevant opportunity" — OpportunitiesService resolves the most recently updated
+/// active row per conversationId; no intent/topic matching yet. See apps/api/README.md.
+model Opportunity {
+  id              String            @id @default(uuid()) @db.Uuid
+  companyId       String            @map("company_id") @db.Uuid
+  company         Company           @relation(fields: [companyId], references: [id])
+  customerId      String            @map("customer_id") @db.Uuid
+  customer        Customer          @relation(fields: [customerId], references: [id])
+  conversationId  String            @map("conversation_id") @db.Uuid
+  conversation    Conversation      @relation(fields: [conversationId], references: [id])
+  state           OpportunityState  @default(NEW)
+  priority        Priority          @default(LOW)
+  risk            RiskLevel         @default(LOW)
+  interestLevel   InterestLevel?    @map("interest_level")
+  score           Int               @default(0)
+  isActive        Boolean           @default(true) @map("is_active")
+  lastEvaluatedAt DateTime?         @map("last_evaluated_at")
+  createdAt       DateTime          @default(now()) @map("created_at")
+  updatedAt       DateTime          @updatedAt @map("updated_at")
+
+  signals                OpportunitySignal[]
+  stateHistory            OpportunityStateHistory[]
+  actionRecommendations   ActionRecommendation[]
+
+  @@index([companyId])
+  @@index([conversationId, isActive])
+  @@map("opportunity")
+}
+
+model OpportunitySignal {
+  id              String       @id @default(uuid()) @db.Uuid
+  opportunityId   String       @map("opportunity_id") @db.Uuid
+  opportunity     Opportunity  @relation(fields: [opportunityId], references: [id])
+  type            SignalType
+  confidence      Float?
+  sourceMessageId String?      @map("source_message_id") @db.Uuid
+  createdAt       DateTime     @default(now()) @map("created_at")
+
+  @@index([opportunityId])
+  @@map("opportunity_signal")
+}
+
+/// One row per state transition only — reevaluating to the same state does not insert
+/// a row (see OpportunitiesService).
+model OpportunityStateHistory {
+  id             String            @id @default(uuid()) @db.Uuid
+  opportunityId  String            @map("opportunity_id") @db.Uuid
+  opportunity    Opportunity       @relation(fields: [opportunityId], references: [id])
+  previousState  OpportunityState? @map("previous_state")
+  newState       OpportunityState  @map("new_state")
+  reason         String?
+  createdAt      DateTime          @default(now()) @map("created_at")
+
+  @@index([opportunityId])
+  @@map("opportunity_state_history")
+}
+
+/// One row per distinct recommended action — reevaluating to the same action does not
+/// insert a row (see OpportunitiesService).
+model ActionRecommendation {
+  id            String         @id @default(uuid()) @db.Uuid
+  opportunityId String         @map("opportunity_id") @db.Uuid
+  opportunity   Opportunity    @relation(fields: [opportunityId], references: [id])
+  action        NextBestAction
+  reason        String
+  priority      Priority
+  createdAt     DateTime       @default(now()) @map("created_at")
+
+  @@index([opportunityId])
+  @@map("action_recommendation")
 }
