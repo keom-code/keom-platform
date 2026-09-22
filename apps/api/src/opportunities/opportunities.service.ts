@@ -32,8 +32,25 @@ export class OpportunitiesService {
     private readonly engine: OpportunityEngineService,
   ) {}
 
-  async evaluate(request: EvaluateOpportunityRequest): Promise<EvaluateOpportunityResult> {
-    const opportunity = await this.resolveOrCreateActiveOpportunity(request);
+  /**
+   * Returns `null` (no-op, nothing read/written beyond the initial lookup) when there is
+   * no active Opportunity for this conversation AND no commercial signal was supplied —
+   * e.g. an M2B interpretation that found nothing commercially relevant ("hola",
+   * "gracias") must not spawn an empty Opportunity. An *existing* active Opportunity is
+   * still reevaluated even with zero signals (safe reevaluation, e.g. settles into
+   * NEW/LOW) — only opportunity *creation* requires evidence.
+   */
+  async evaluate(request: EvaluateOpportunityRequest): Promise<EvaluateOpportunityResult | null> {
+    const existing = await this.findActiveOpportunity(request.conversationId);
+
+    if (!existing && request.signals.length === 0) {
+      this.logger.log(
+        `No active Opportunity and no commercial signals for conversationId=${request.conversationId}; skipping (no-op)`,
+      );
+      return null;
+    }
+
+    const opportunity = existing ?? (await this.createOpportunity(request));
 
     const evaluation = this.engine.evaluate({
       interestLevel: request.interestLevel,
@@ -73,15 +90,14 @@ export class OpportunitiesService {
    * this — multiple concurrent opportunities per conversation are a valid future
    * evolution this design leaves room for.
    */
-  private async resolveOrCreateActiveOpportunity(request: EvaluateOpportunityRequest): Promise<Opportunity> {
-    const existing = await this.prisma.opportunity.findFirst({
-      where: { conversationId: request.conversationId, isActive: true },
+  private async findActiveOpportunity(conversationId: string): Promise<Opportunity | null> {
+    return this.prisma.opportunity.findFirst({
+      where: { conversationId, isActive: true },
       orderBy: { updatedAt: "desc" },
     });
-    if (existing) {
-      return existing;
-    }
+  }
 
+  private async createOpportunity(request: EvaluateOpportunityRequest): Promise<Opportunity> {
     this.logger.log(`No active Opportunity for conversationId=${request.conversationId}; creating one`);
     return this.prisma.opportunity.create({
       data: {

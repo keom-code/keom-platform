@@ -159,6 +159,37 @@ describe("OpportunitiesService", () => {
     expect(prisma.actionRecommendation.create).not.toHaveBeenCalled();
   });
 
+  it("returns null and creates nothing when there is no active Opportunity and no signals are supplied", async () => {
+    const result = await service.evaluate({
+      companyId: COMPANY_ID,
+      customerId: CUSTOMER_ID,
+      conversationId: CONVERSATION_ID,
+      interestLevel: "LOW",
+      signals: [],
+    });
+
+    expect(result).toBeNull();
+    expect(prisma.opportunity.create).not.toHaveBeenCalled();
+    expect(prisma.opportunity.update).not.toHaveBeenCalled();
+    expect(prisma.opportunitySignal.createMany).not.toHaveBeenCalled();
+  });
+
+  it("still reevaluates an existing active Opportunity even with zero signals", async () => {
+    prisma.opportunity.findFirst.mockResolvedValue(baseOpportunity({ state: "NEW" }));
+
+    const result = await service.evaluate({
+      companyId: COMPANY_ID,
+      customerId: CUSTOMER_ID,
+      conversationId: CONVERSATION_ID,
+      interestLevel: "LOW",
+      signals: [],
+    });
+
+    expect(result).not.toBeNull();
+    expect(prisma.opportunity.create).not.toHaveBeenCalled();
+    expect(prisma.opportunity.update).toHaveBeenCalled();
+  });
+
   it("deactivates the Opportunity when NO_LONGER_INTERESTED is present", async () => {
     prisma.opportunity.findFirst.mockResolvedValue(baseOpportunity({ isActive: true }));
 

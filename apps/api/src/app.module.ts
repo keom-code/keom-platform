@@ -4,6 +4,7 @@ import { PrismaModule } from "./prisma/prisma.module";
 import { IngestionModule } from "./ingestion/ingestion.module";
 import { WhatsappModule } from "./whatsapp/whatsapp.module";
 import { OpportunitiesModule } from "./opportunities/opportunities.module";
+import { InterpretationModule } from "./interpretation/interpretation.module";
 
 @Module({
   imports: [
@@ -12,6 +13,7 @@ import { OpportunitiesModule } from "./opportunities/opportunities.module";
     IngestionModule,
     WhatsappModule,
     OpportunitiesModule,
+    InterpretationModule,
   ],
 })
 export class AppModule {}

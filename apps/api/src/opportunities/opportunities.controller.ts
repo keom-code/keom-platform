@@ -26,7 +26,7 @@ export class OpportunitiesController {
       throw err;
     }
 
-    const { opportunity, evaluation } = await this.opportunities.evaluate({
+    const result = await this.opportunities.evaluate({
       companyId: payload.companyId,
       customerId: payload.customerId,
       conversationId: payload.conversationId,
@@ -35,6 +35,12 @@ export class OpportunitiesController {
       lastInboundAt: payload.lastInboundAt ? new Date(payload.lastInboundAt) : undefined,
       lastOutboundAt: payload.lastOutboundAt ? new Date(payload.lastOutboundAt) : undefined,
     });
+
+    if (!result) {
+      return { noOp: true, reason: "No active Opportunity and no commercial signal supplied; nothing created." };
+    }
+
+    const { opportunity, evaluation } = result;
 
     return {
       opportunityId: opportunity.id,

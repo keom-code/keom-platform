@@ -15,7 +15,25 @@ export type SignalType =
   | "OBJECTION"
   | "NO_LONGER_INTERESTED";
 
+/** Runtime-checkable mirror of SignalType, for Zod schemas etc. (e.g. src/llm) that need
+ * an actual value, not just a compile-time union. Single source of truth stays here —
+ * do not redeclare these values elsewhere. */
+export const SIGNAL_TYPES: SignalType[] = [
+  "PRICING_REQUESTED",
+  "AVAILABILITY_REQUESTED",
+  "BOOKING_INTENT",
+  "PURCHASE_INTENT",
+  "QUOTE_REQUESTED",
+  "PAYMENT_QUESTION",
+  "FOLLOW_UP_REQUESTED",
+  "OBJECTION",
+  "NO_LONGER_INTERESTED",
+];
+
 export type InterestLevel = "LOW" | "MEDIUM" | "HIGH";
+
+/** Runtime-checkable mirror of InterestLevel, see SIGNAL_TYPES above. */
+export const INTEREST_LEVELS: InterestLevel[] = ["LOW", "MEDIUM", "HIGH"];
 export type Priority = "LOW" | "MEDIUM" | "HIGH";
 export type RiskLevel = "LOW" | "MEDIUM" | "HIGH";
 export type OpportunityState = "NEW" | "ENGAGED" | "HIGH_INTENT" | "AT_RISK";

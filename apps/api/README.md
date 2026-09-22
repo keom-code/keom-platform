@@ -156,7 +156,13 @@ M2A does not currently wire ingested messages into the engine.
 **Opportunity resolution (MVP simplification, documented deliberately):** there is no
 DB-level "one Opportunity per Conversation" constraint. `OpportunitiesService` reuses the
 most recently updated `isActive: true` Opportunity for the given `conversationId` if one
-exists, otherwise creates a new one. No intent/topic matching — this is intentionally
+exists, otherwise creates a new one — **but only if the request carries at least one
+commercial signal.** `OpportunitiesService.evaluate()` returns `null` (no-op, nothing
+read/written beyond the initial lookup) when there is no active Opportunity for the
+conversation *and* zero signals were supplied — e.g. an M2B interpretation of "hola" or
+"gracias" must not spawn an empty Opportunity. An *existing* active Opportunity is still
+reevaluated even with zero signals (safe reevaluation, e.g. settles into `NEW`/`LOW`) —
+only *creation* requires evidence. No intent/topic matching — this is intentionally
 simple for M2A and leaves room for multiple (sequential or, later, concurrent)
 opportunities per conversation. E.g.: a `NO_LONGER_INTERESTED` evaluation deactivates the
 current Opportunity; a later re-engagement on the same conversation creates a fresh one
@@ -244,6 +250,9 @@ Expected response shape:
 }
 ```
 
+If there is no active Opportunity for the conversation and `signals` is empty, the
+endpoint instead returns `{ "noOp": true, "reason": "..." }` — nothing is created.
+
 Posting the same `conversationId` again reuses the same active Opportunity (no duplicate
 row) unless the previous evaluation deactivated it (`NO_LONGER_INTERESTED`), in which case
 a new Opportunity is created for that conversation.
@@ -256,6 +265,205 @@ supplying them as structured input.
 **Later:** Redis/BullMQ/Kafka, scheduled/periodic risk reevaluation, notifications,
 outbound WhatsApp messaging, seller approval / human escalation workflows, recovered
 revenue, payment/calendar/CRM integrations, analytics dashboards.
+
+---
+
+## Milestone 2B — LLM Commercial Interpretation Layer
+
+M2B scope: persisted conversation messages → bounded Context Builder → LLM
+(`CommercialInterpreter`) → structured commercial interpretation → runtime (Zod)
+validation → mapped straight into the **unchanged** M2A input contract →
+`OpportunitiesService.evaluate()` → persisted result. **Core rule: the LLM interprets,
+M2A decides** — nothing in this milestone computes score/priority/state/risk/
+nextBestAction; that logic lives entirely in `OpportunityEngineService` (M2A) and was not
+touched. No RAG (the LLM never retrieves business knowledge — "¿cuánto cuesta?" always
+maps to `PRICING_REQUESTED`, never to an actual price), no Redis/BullMQ, no outbound
+WhatsApp, no frontend changes.
+
+### Architecture
+
+```
+Conversation (persisted Messages)
+        ↓
+src/interpretation/context-builder.service.ts   (bounded, deterministic context)
+        ↓
+src/llm/  (CommercialInterpreter abstraction, provider-agnostic)
+  └─ OpenAiCommercialInterpreter                (only concrete implementation)
+        ↓
+Zod validation (src/llm/commercial-interpretation.schema.ts) — the actual gate,
+regardless of what the provider's response_format claims to guarantee
+        ↓
+src/interpretation/interpretation.mapper.ts     (thin: interpretation -> M2A input)
+        ↓
+OpportunitiesService.evaluate()                 (unchanged M2A engine + persistence)
+```
+
+`src/llm/` knows nothing about Prisma, Nest controllers, or conversations — it only
+implements `CommercialInterpreter.interpret(context): Promise<CommercialInterpretation>`.
+`src/interpretation/` is the only new orchestration layer; it depends on the
+`COMMERCIAL_INTERPRETER` DI token (the interface), never on `OpenAiCommercialInterpreter`
+directly, so a future provider (e.g. Anthropic) is a new class in `src/llm/`, not a
+rewrite of the orchestration.
+
+**M2A adjustment made alongside M2B (small, documented):** `OpportunitiesService.evaluate()`
+now returns `null` (no-op — nothing read/written beyond the initial lookup) when there is
+no active Opportunity for the conversation *and* zero commercial signals were supplied.
+This matters specifically because of M2B: an interpretation of "hola" or "gracias" (intent
+`OTHER`, no signals) must not spawn an empty Opportunity. An *existing* active Opportunity
+is still safely reevaluated even with zero signals. See the M2A section above for the
+updated resolution rule and `OpportunitiesController`'s `{ noOp: true }` response shape.
+
+### LLM provider abstraction & environment
+
+```ts
+// src/llm/commercial-interpreter.ts
+interface CommercialInterpreter {
+  interpret(context: CommercialContext): Promise<CommercialInterpretation>;
+}
+```
+
+Bound via the `COMMERCIAL_INTERPRETER` DI token in `src/llm/llm.module.ts`. Provider,
+model, API key, and timeout are **entirely environment-driven** (see `.env.example`) —
+never hardcoded in `InterpretationService`, the mapper, or anywhere in business logic:
+
+```
+LLM_PROVIDER=openai
+LLM_MODEL=gpt-4o-mini      # any cheap structured-extraction model; not a reasoning model
+OPENAI_API_KEY=
+LLM_TIMEOUT_MS=10000
+```
+
+Config is resolved **lazily**, inside `OpenAiCommercialInterpreter.interpret()` (via
+`src/llm/llm.config.ts`), not at app bootstrap — the API still starts and M1/M2A still
+work with zero LLM env vars set; only an actual interpretation call fails, safely, if
+config is missing or invalid. No secret is ever committed — `.env` is git-ignored,
+`.env.example` carries placeholders only (confirmed: `git check-ignore -v apps/api/.env`
+resolves via the root `.gitignore`).
+
+### Structured output & validation
+
+```ts
+{
+  intent: "BOOKING" | "PRICING" | "INFORMATION" | "PURCHASE" | "OTHER",
+  interestLevel: "LOW" | "MEDIUM" | "HIGH",     // reused from opportunities.types.ts
+  signals: SignalType[],                         // reused, no competing enum
+  entities: { requestedDate?, requestedTime?, serviceName?, productName? },
+  confidence: number,                            // 0-1, one overall value per call
+}
+```
+
+Validated by `CommercialInterpretationSchema` (Zod) immediately after the provider
+responds — malformed JSON, an unsupported/invented signal value, or a missing field never
+reaches the mapper or `OpportunitiesService`. **`intent` and `entities` are not
+persisted** (no Prisma columns added) — they're returned in the dev endpoint response and
+logged for observability only. Product can justify persisting selected entities later;
+M2B deliberately doesn't build that now. `confidence` is applied uniformly to every
+`OpportunitySignal` row created from a given interpretation call (no per-signal
+confidence yet). `sourceMessageId` on those rows is the conversation's latest inbound
+message — the LLM doesn't attribute individual signals to individual messages.
+
+Uses OpenAI's `response_format: { type: "json_object" }` (JSON mode), not strict
+provider-side `json_schema` mode — this avoids an extra schema-conversion dependency for
+M2B. The Zod schema above is the real validation boundary regardless of what the
+provider's own mode claims to guarantee, and the design stays provider-agnostic (nothing
+about `json_object` mode is OpenAI-specific in the orchestration layer).
+
+### Context Builder strategy
+
+Given a `conversationId`: fetch the last **10** messages (oldest-first for the prompt),
+each capped at 1000 chars. No prior signals, no current Opportunity state, no full
+history is sent — bounded, deterministic for a given DB snapshot, and cheap. The same
+message set is reused (not re-queried) to derive `lastInboundAt`/`lastOutboundAt`/
+`lastInboundMessageId` for the M2A call.
+
+### Prompt
+
+System prompt (fixed, not env-driven): instructs the model to extract only observable
+commercial meaning, never answer the customer, never invent business facts, never compute
+priority/risk/state/action, use only the 9 supported signal values, omit a signal rather
+than guess when uncertain, and return only the JSON schema — no chain-of-thought. See
+`src/llm/prompt.ts` for the exact text. User content is the rendered
+`[CUSTOMER] .../[BUSINESS] ...` transcript.
+
+### Mapping to M2A
+
+`mapInterpretationToOpportunityInput()` (`src/interpretation/interpretation.mapper.ts`) is
+intentionally thin: `interestLevel` and `signals` pass straight through
+(`NO_LONGER_INTERESTED`/`OBJECTION` reach M2A's existing override/rules untouched), each
+signal gets the call's one `confidence` value and the latest inbound message's id, and
+`lastInboundAt`/`lastOutboundAt` come from the Context Builder. No business logic lives
+in the mapper.
+
+### Failure handling
+
+`InterpretationError` (with a `code`) covers: `MISSING_CONFIG`/`INVALID_CONFIG` (bad/absent
+env), `PROVIDER_TIMEOUT`, `PROVIDER_ERROR` (any other SDK/API error), `EMPTY_RESPONSE`,
+`INVALID_OUTPUT` (non-JSON or schema-invalid). It's always thrown **before**
+`OpportunitiesService.evaluate()` is reached, so any interpretation failure is inherently
+a no-mutation failure — nothing is read/written to `Opportunity`/`OpportunitySignal`/etc.
+`InterpretationController` maps these to `503`/`504`/`502` respectively; a
+nonexistent `conversationId` surfaces as `404` from the Context Builder.
+
+### Testing this milestone locally
+
+```bash
+pnpm --filter @keom/api test                                   # unit: llm + interpretation + existing M1/M2A suites
+pnpm --filter @keom/api test:e2e                                # e2e: needs Postgres; CommercialInterpreter is DI-overridden with a mock — no real LLM calls
+```
+
+### Manual/demo testing with a real LLM (optional)
+
+Automated tests never call a real provider. To try it against the real OpenAI API:
+
+```bash
+export LLM_PROVIDER=openai
+export LLM_MODEL=gpt-4o-mini
+export OPENAI_API_KEY=<your local key, never commit this>
+```
+(or set them in `apps/api/.env`, which is git-ignored)
+
+Then, with a real ingested conversation (see the M1 section above for how to get a real
+`conversationId` via the fixture webhook):
+
+```bash
+curl -X POST http://localhost:3001/dev/interpretation/evaluate \
+  -H "Content-Type: application/json" \
+  -d '{ "conversationId": "<conversation-id>" }'
+```
+
+Expected response shape:
+
+```json
+{
+  "interpretation": {
+    "intent": "BOOKING",
+    "interestLevel": "HIGH",
+    "signals": ["BOOKING_INTENT", "AVAILABILITY_REQUESTED"],
+    "entities": { "requestedDate": "sábado" },
+    "confidence": 0.87
+  },
+  "opportunity": {
+    "opportunityId": "...",
+    "state": "HIGH_INTENT",
+    "priority": "HIGH",
+    "risk": "LOW",
+    "nextBestAction": "OFFER_APPOINTMENT",
+    "score": 90,
+    "scoreBreakdown": ["..."],
+    "reasons": { "state": "...", "risk": "...", "action": "..." },
+    "isActive": true
+  }
+}
+```
+
+If there's no active Opportunity and the interpretation finds no signals, `opportunity`
+is instead `{ "noOp": true, "reason": "..." }`.
+
+### Not in M2B (future milestones)
+
+**M3:** business knowledge, documents, chunks, embeddings, pgvector, retrieval, RAG.
+**Later:** Redis/BullMQ, scheduled/periodic reevaluation, notifications, human approval,
+outbound WhatsApp, recovered opportunities/revenue.
 
 ---
 
