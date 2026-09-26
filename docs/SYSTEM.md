@@ -24,7 +24,7 @@ flowchart TD
     Ingestion --> DB[("PostgreSQL<br/>via Prisma")]
 
     DB --> ContextBuilder["ContextBuilderService<br/>apps/api/src/interpretation — M2B<br/>last 10 messages, bounded"]
-    ContextBuilder --> LLM["CommercialInterpreter<br/>apps/api/src/llm — M2B<br/>OpenAI, env-configured, interprets only"]
+    ContextBuilder --> LLM["CommercialInterpreter<br/>apps/api/src/llm — M2B<br/>OpenAI (default) or Jev (experimental),<br/>env-selected, interprets only"]
     LLM --> Mapper["Mapper<br/>interpretation → M2A input<br/>thin, no business logic"]
     Mapper --> Engine["OpportunityEngineService<br/>apps/api/src/opportunities — M2A<br/>deterministic: score → priority → state → risk → next best action"]
     Engine --> DB

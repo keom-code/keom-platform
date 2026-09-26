@@ -21,5 +21,5 @@
       "@keom/mocks": ["../../packages/mocks/src/fixtures/whatsapp/received-text-message.ts"]
     }
   },
-  "include": ["src", "prisma", "test"]
+  "include": ["src", "prisma", "test", "evals"]
 }

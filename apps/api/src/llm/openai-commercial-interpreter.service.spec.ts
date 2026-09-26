@@ -1,7 +1,7 @@
 import OpenAI, { APIConnectionTimeoutError, APIError } from "openai";
 import { CommercialContext, InterpretationError } from "./commercial-interpreter";
 import { OpenAiCommercialInterpreter } from "./openai-commercial-interpreter.service";
-import { LlmConfig } from "./llm.config";
+import { OpenAiConfig } from "./llm.config";
 
 /**
  * No real network/API calls: `createClient` is stubbed per test via subclassing (see
@@ -16,7 +16,7 @@ class TestableInterpreter extends OpenAiCommercialInterpreter {
   constructor(private readonly client: OpenAI) {
     super();
   }
-  protected override createClient(_config: LlmConfig): OpenAI {
+  protected override createClient(_config: OpenAiConfig): OpenAI {
     return this.client;
   }
 }
@@ -31,7 +31,9 @@ const originalEnv = { ...process.env };
 describe("OpenAiCommercialInterpreter", () => {
   beforeEach(() => {
     process.env.LLM_PROVIDER = "openai";
-    process.env.LLM_MODEL = "gpt-4o-mini";
+    process.env.OPENAI_MODEL = "gpt-4o-mini";
+    delete process.env.LLM_MODEL;
+    delete process.env.OPENAI_REASONING_EFFORT;
     process.env.OPENAI_API_KEY = "test-key";
     process.env.LLM_TIMEOUT_MS = "10000";
   });
@@ -125,5 +127,82 @@ describe("OpenAiCommercialInterpreter", () => {
     const interpreter = new TestableInterpreter(fakeClient(create));
 
     await expect(interpreter.interpret(context)).rejects.toMatchObject({ code: "PROVIDER_ERROR" });
+  });
+
+  describe("request parameters", () => {
+    const validResponse = {
+      model: "gpt-4o-mini-2024-07-18",
+      choices: [
+        {
+          message: {
+            content: JSON.stringify({ intent: "OTHER", interestLevel: "LOW", signals: [], entities: {}, confidence: 0.9 }),
+          },
+        },
+      ],
+      usage: {
+        prompt_tokens: 120,
+        completion_tokens: 30,
+        total_tokens: 150,
+        prompt_tokens_details: { cached_tokens: 10 },
+        completion_tokens_details: { reasoning_tokens: 0 },
+      },
+    };
+
+    it("sends the original M2B request (temperature 0, no reasoning_effort) when OPENAI_REASONING_EFFORT is unset", async () => {
+      const create = jest.fn().mockResolvedValue(validResponse);
+      await new TestableInterpreter(fakeClient(create)).interpret(context);
+
+      const params = create.mock.calls[0][0];
+      expect(params).toMatchObject({ model: "gpt-4o-mini", temperature: 0, response_format: { type: "json_object" } });
+      expect(params).not.toHaveProperty("reasoning_effort");
+    });
+
+    it("omits temperature when a reasoning effort other than none is configured", async () => {
+      process.env.OPENAI_MODEL = "gpt-5.6-luna";
+      process.env.OPENAI_REASONING_EFFORT = "low";
+      const create = jest.fn().mockResolvedValue(validResponse);
+      await new TestableInterpreter(fakeClient(create)).interpret(context);
+
+      const params = create.mock.calls[0][0];
+      expect(params).toMatchObject({ model: "gpt-5.6-luna", reasoning_effort: "low" });
+      expect(params).not.toHaveProperty("temperature");
+    });
+
+    it("keeps temperature 0 alongside reasoning_effort none", async () => {
+      process.env.OPENAI_REASONING_EFFORT = "none";
+      const create = jest.fn().mockResolvedValue(validResponse);
+      await new TestableInterpreter(fakeClient(create)).interpret(context);
+
+      expect(create.mock.calls[0][0]).toMatchObject({ reasoning_effort: "none", temperature: 0 });
+    });
+
+    it("throws INVALID_CONFIG for an unknown OPENAI_REASONING_EFFORT, before calling the provider", async () => {
+      process.env.OPENAI_REASONING_EFFORT = "turbo";
+      const create = jest.fn();
+
+      await expect(new TestableInterpreter(fakeClient(create)).interpret(context)).rejects.toMatchObject({ code: "INVALID_CONFIG" });
+      expect(create).not.toHaveBeenCalled();
+    });
+
+    it("falls back to the legacy LLM_MODEL variable when OPENAI_MODEL is unset", async () => {
+      delete process.env.OPENAI_MODEL;
+      process.env.LLM_MODEL = "legacy-model";
+      const create = jest.fn().mockResolvedValue(validResponse);
+      await new TestableInterpreter(fakeClient(create)).interpret(context);
+
+      expect(create.mock.calls[0][0]).toMatchObject({ model: "legacy-model" });
+    });
+
+    it("reports served model, latency and normalized usage via interpretWithDiagnostics", async () => {
+      const create = jest.fn().mockResolvedValue(validResponse);
+      const { diagnostics } = await new TestableInterpreter(fakeClient(create)).interpretWithDiagnostics(context);
+
+      expect(diagnostics).toMatchObject({
+        provider: "openai",
+        model: "gpt-4o-mini-2024-07-18",
+        usage: { inputTokens: 120, outputTokens: 30, cachedInputTokens: 10, reasoningTokens: 0 },
+      });
+      expect(diagnostics.latencyMs).toBeGreaterThanOrEqual(0);
+    });
   });
 });

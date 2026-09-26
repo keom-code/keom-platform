@@ -8,7 +8,7 @@ import { CommercialContext } from "../llm/commercial-interpreter";
  * conversation history, no prior signals/Opportunity state fed into the prompt (that
  * would anchor the LLM on stale state — M2A alone owns state transitions).
  */
-const MAX_MESSAGES = 10;
+export const MAX_MESSAGES = 10;
 
 export interface ConversationContext {
   companyId: string;

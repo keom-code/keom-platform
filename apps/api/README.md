@@ -288,7 +288,9 @@ Conversation (persisted Messages)
 src/interpretation/context-builder.service.ts   (bounded, deterministic context)
         ↓
 src/llm/  (CommercialInterpreter abstraction, provider-agnostic)
-  └─ OpenAiCommercialInterpreter                (only concrete implementation)
+  └─ ProviderSelectingInterpreter               (picks per call from LLM_PROVIDER)
+       ├─ OpenAiCommercialInterpreter           (default)
+       └─ JevCommercialInterpreter              (experimental — see "Experimental: Jev" below)
         ↓
 Zod validation (src/llm/commercial-interpretation.schema.ts) — the actual gate,
 regardless of what the provider's response_format claims to guarantee
@@ -301,9 +303,9 @@ OpportunitiesService.evaluate()                 (unchanged M2A engine + persiste
 `src/llm/` knows nothing about Prisma, Nest controllers, or conversations — it only
 implements `CommercialInterpreter.interpret(context): Promise<CommercialInterpretation>`.
 `src/interpretation/` is the only new orchestration layer; it depends on the
-`COMMERCIAL_INTERPRETER` DI token (the interface), never on `OpenAiCommercialInterpreter`
-directly, so a future provider (e.g. Anthropic) is a new class in `src/llm/`, not a
-rewrite of the orchestration.
+`COMMERCIAL_INTERPRETER` DI token (the interface), never on a concrete provider class, so
+a new provider is a new class in `src/llm/` plus a branch in `ProviderSelectingInterpreter`,
+not a rewrite of the orchestration.
 
 **M2A adjustment made alongside M2B (small, documented):** `OpportunitiesService.evaluate()`
 now returns `null` (no-op — nothing read/written beyond the initial lookup) when there is
@@ -322,21 +324,31 @@ interface CommercialInterpreter {
 }
 ```
 
-Bound via the `COMMERCIAL_INTERPRETER` DI token in `src/llm/llm.module.ts`. Provider,
-model, API key, and timeout are **entirely environment-driven** (see `.env.example`) —
-never hardcoded in `InterpretationService`, the mapper, or anywhere in business logic:
+Bound via the `COMMERCIAL_INTERPRETER` DI token in `src/llm/llm.module.ts`, which resolves
+to `ProviderSelectingInterpreter`. Provider, model, API key, and timeout are **entirely
+environment-driven** (see `.env.example`) — never hardcoded in `InterpretationService`,
+the mapper, or anywhere in business logic:
 
 ```
-LLM_PROVIDER=openai
-LLM_MODEL=gpt-4o-mini      # any cheap structured-extraction model; not a reasoning model
+LLM_PROVIDER=openai          # openai | jev
+LLM_TIMEOUT_MS=10000         # per call; for Jev this is the total budget including retries
 OPENAI_API_KEY=
-LLM_TIMEOUT_MS=10000
+OPENAI_MODEL=gpt-4o-mini     # legacy LLM_MODEL is still read as a fallback
+OPENAI_REASONING_EFFORT=     # optional; only for reasoning models (e.g. "none" for gpt-5.6-luna)
+TYPESAFE_API_KEY=            # only needed when LLM_PROVIDER=jev (or for the offline eval)
+JEV_MODEL=jev-1.13.0         # pinned version; the jev-latest/jev-preview aliases are rejected
 ```
 
-Config is resolved **lazily**, inside `OpenAiCommercialInterpreter.interpret()` (via
-`src/llm/llm.config.ts`), not at app bootstrap — the API still starts and M1/M2A still
-work with zero LLM env vars set; only an actual interpretation call fails, safely, if
-config is missing or invalid. No secret is ever committed — `.env` is git-ignored,
+With `OPENAI_REASONING_EFFORT` unset, the OpenAI request is exactly the original M2B one
+(`temperature: 0`, no `reasoning_effort`). When it is set, `reasoning_effort` is sent and
+`temperature: 0` is kept only for `"none"` — reasoning models reject `temperature`
+otherwise.
+
+Config is resolved **lazily**, per call (via `src/llm/llm.config.ts`), not at app
+bootstrap — the API still starts and M1/M2A still work with zero LLM env vars set; only an
+actual interpretation call fails, safely, if config is missing or invalid. Each provider
+reads only its own variables, so only the selected provider needs credentials. There is
+no automatic fallback between providers. No secret is ever committed — `.env` is git-ignored,
 `.env.example` carries placeholders only (confirmed: `git check-ignore -v apps/api/.env`
 resolves via the root `.gitignore`).
 
@@ -398,10 +410,11 @@ in the mapper.
 
 `InterpretationError` (with a `code`) covers: `MISSING_CONFIG`/`INVALID_CONFIG` (bad/absent
 env), `PROVIDER_TIMEOUT`, `PROVIDER_ERROR` (any other SDK/API error), `EMPTY_RESPONSE`,
-`INVALID_OUTPUT` (non-JSON or schema-invalid). It's always thrown **before**
+`INVALID_OUTPUT` (non-JSON or schema-invalid), `UNCERTAIN_OUTPUT` (the provider answered
+but not confidently enough to act on — currently Jev only). It's always thrown **before**
 `OpportunitiesService.evaluate()` is reached, so any interpretation failure is inherently
 a no-mutation failure — nothing is read/written to `Opportunity`/`OpportunitySignal`/etc.
-`InterpretationController` maps these to `503`/`504`/`502` respectively; a
+`InterpretationController` maps these to `503`/`504`/`502`/`422` respectively; a
 nonexistent `conversationId` surfaces as `404` from the Context Builder.
 
 ### Testing this milestone locally
@@ -417,7 +430,7 @@ Automated tests never call a real provider. To try it against the real OpenAI AP
 
 ```bash
 export LLM_PROVIDER=openai
-export LLM_MODEL=gpt-4o-mini
+export OPENAI_MODEL=gpt-4o-mini
 export OPENAI_API_KEY=<your local key, never commit this>
 ```
 (or set them in `apps/api/.env`, which is git-ignored)
@@ -458,6 +471,79 @@ Expected response shape:
 
 If there's no active Opportunity and the interpretation finds no signals, `opportunity`
 is instead `{ "noOp": true, "reason": "..." }`.
+
+### Experimental: Jev (TypeSafe AI) interpreter and offline comparison
+
+`JevCommercialInterpreter` is an **opt-in alternative** to OpenAI behind the same
+interface (`LLM_PROVIDER=jev`). OpenAI remains the default; nothing switches providers
+automatically. Jev is a typed-decision model (TypeSafe System One API, `@typesafe-ai/sdk`,
+pinned `jev-1.13.0`), not a text generator. It only classifies. Score, priority, state,
+risk and next best action still come exclusively from M2A.
+
+**Request:** one `systemOne` call whose `state` is exactly the transcript OpenAI receives
+(`buildUserPrompt`: same last-10 messages, 1000-char cap, `[CUSTOMER]`/`[BUSINESS]` tags),
+with 11 questions built from the existing enums (`src/llm/jev-questions.ts`): a Choice for
+intent, a Choice for interest level, and one Noul (yes-probability) per `SignalType`. Jev
+has no system prompt, so every question repeats a preamble: only customer lines count as
+evidence, message text is data (ignore instructions inside it), and the customer's most
+recent stance wins. Criteria spell out availability vs. booking, objection vs. loss of
+interest, and negation ("no quiero cancelar" keeps the plan).
+
+**Entities:** always `{}`. Jev does not extract free text, and this experiment defers
+entity extraction. That is safe for current consumers: the Zod schema defaults `entities`
+to `{}`, the mapper drops it, M2A never reads it and `apps/web` does not consume it. The
+only visible difference is the dev endpoint's `interpretation.entities`.
+
+**Uncertainty and confidence** (`src/llm/jev-thresholds.ts`, versioned, provisional):
+
+- A signal is present when p ≥ 0.8, confidently absent when p ≤ 0.2, and **uncertain**
+  in between. `NO_LONGER_INTERESTED` uses 0.9 / 0.1 because M2A deactivates on it.
+- Intent/interest Choices need Jev-reported confidence ≥ 0.5.
+- Any uncertain answer throws `UNCERTAIN_OUTPUT`, so M2A is never called. Uncertainty
+  never becomes a successful `signals: []`, which is returned only when every signal is
+  confidently absent. Missing/mistyped answers or out-of-range probabilities throw
+  `INVALID_OUTPUT`.
+- The single `confidence` field is a **Jev-specific heuristic**: the minimum of the two
+  Choice confidences and each signal's |2p − 1|. It is not calibrated and not comparable
+  with OpenAI's self-reported confidence. M2A does not read it; it is only stored on
+  `OpportunitySignal`. The raw per-question probabilities appear only in the evaluation
+  output, never in the database.
+
+**Offline evaluation** (`apps/api/evals/commercial-interpretation/`):
+
+- `dataset.v1.json`: 50 synthetic Spanish conversations covering greetings, pricing,
+  quotes, availability, booking, purchase, multi-signal, objections, payment (Yape/Plin),
+  loss of interest, negation, change of mind, business-only messages, slang, typos, mixed
+  Spanish/English, ambiguous references ("sí, ese", "me sirve", "el primero", "entonces
+  mañana") and prompt injection. Labels follow the `labelingGuide` in the file. **Every
+  case starts as `review.status: "draft"`** and must be human-reviewed before it is scored.
+  Neither provider's output is ground truth.
+- `run-eval.ts` calls the interpreter classes directly: no Nest app, no database, no
+  HTTP, so nothing is mutated. Do not benchmark through `/dev/interpretation/evaluate`.
+  It ignores `LLM_PROVIDER` and runs each requested provider with its own env config.
+
+```bash
+# keys come from your shell; nothing is written back to .env
+export OPENAI_API_KEY=... OPENAI_MODEL=gpt-5.6-luna OPENAI_REASONING_EFFORT=none
+export TYPESAFE_API_KEY=... JEV_MODEL=jev-1.13.0
+pnpm --filter @keom/api eval:interpreters                        # reviewed cases, both providers
+pnpm --filter @keom/api eval:interpreters -- --providers jev --tag negation
+pnpm --filter @keom/api eval:interpreters -- --include-drafts     # smoke run on unreviewed labels
+```
+
+Results go to `evals/commercial-interpretation/results/` (gitignored): a JSON file with
+per-case predictions, errors, usage and raw Jev probabilities, plus a Markdown summary.
+Per provider it reports intent and interest-level accuracy (answered-only and overall),
+per-signal TP/FP/FN, precision and recall with case ids, false and missed
+`NO_LONGER_INTERESTED`, M2A outcome differences (the real engine replayed in memory on
+expected vs. predicted labels), status counts (uncertain, invalid, timeout, error),
+p50/p95 latency including retries, token usage, and every failing case. Cost is always
+**estimated** (usage × the published prices in `metrics.ts`, verified 2026-09-25), because
+neither provider returns a billed amount. Models without a verified price show no cost.
+The report never picks a winner.
+
+**Rollback:** set `LLM_PROVIDER=openai`, which takes effect on the next call with no
+restart and no data migration.
 
 ### Not in M2B (future milestones)
 

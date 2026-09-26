@@ -1,4 +1,13 @@
-import { BadGatewayException, BadRequestException, Body, Controller, GatewayTimeoutException, Post, ServiceUnavailableException } from "@nestjs/common";
+import {
+  BadGatewayException,
+  BadRequestException,
+  Body,
+  Controller,
+  GatewayTimeoutException,
+  Post,
+  ServiceUnavailableException,
+  UnprocessableEntityException,
+} from "@nestjs/common";
 import { ZodError } from "zod";
 import { InterpretationError } from "../llm/commercial-interpreter";
 import { EvaluateInterpretationRequestSchema } from "./evaluate-interpretation.schema";
@@ -9,7 +18,7 @@ import { InterpretationService } from "./interpretation.service";
  * from already-persisted messages, calls the configured LLM, and — on a valid,
  * runtime-validated interpretation — feeds it straight into the existing M2A engine.
  * Doubles as the manual real-LLM test path (see apps/api/README.md M2B section): with
- * real LLM_PROVIDER/LLM_MODEL/OPENAI_API_KEY set, this endpoint makes a real provider
+ * real LLM_PROVIDER plus that provider's model/key set, this endpoint makes a real provider
  * call; in automated tests, CommercialInterpreter is DI-overridden with a mock.
  */
 @Controller("dev/interpretation")
@@ -71,6 +80,8 @@ export class InterpretationController {
       case "EMPTY_RESPONSE":
       case "INVALID_OUTPUT":
         return new BadGatewayException(err.message);
+      case "UNCERTAIN_OUTPUT":
+        return new UnprocessableEntityException(err.message);
       default:
         return err;
     }

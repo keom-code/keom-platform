@@ -28,6 +28,8 @@ pnpm-debug.log*
 
 # testing
 coverage/
+# live provider outputs from the offline interpreter evaluation (apps/api/evals)
+apps/api/evals/**/results/
 playwright-report/
 test-results/
 

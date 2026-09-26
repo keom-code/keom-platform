@@ -102,6 +102,13 @@ describe("InterpretationService", () => {
     expect(opportunities.evaluate).not.toHaveBeenCalled();
   });
 
+  it("never calls OpportunitiesService.evaluate when the interpretation is uncertain (not treated as 'no signals')", async () => {
+    interpreter.interpret.mockRejectedValue(new InterpretationError("UNCERTAIN_OUTPUT", "NO_LONGER_INTERESTED(p=0.6)"));
+
+    await expect(service.evaluate(CONVERSATION_ID)).rejects.toMatchObject({ code: "UNCERTAIN_OUTPUT" });
+    expect(opportunities.evaluate).not.toHaveBeenCalled();
+  });
+
   it("never calls OpportunitiesService.evaluate when the context builder fails, and propagates the error", async () => {
     contextBuilder.build.mockRejectedValue(new Error("conversation not found"));
 

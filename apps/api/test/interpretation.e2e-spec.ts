@@ -173,6 +173,20 @@ describe("Interpretation evaluation (e2e)", () => {
     expect(after).toEqual(before);
   });
 
+  it("returns 422 and does not mutate Opportunities when the interpretation is uncertain", async () => {
+    mockInterpreter.interpret.mockRejectedValue(new InterpretationError("UNCERTAIN_OUTPUT", "NO_LONGER_INTERESTED(p=0.6)"));
+
+    const before = await prisma.opportunity.findMany({ where: { conversationId: TEST_CONVERSATION_ID } });
+
+    await request(app.getHttpServer())
+      .post("/dev/interpretation/evaluate")
+      .send({ conversationId: TEST_CONVERSATION_ID })
+      .expect(422);
+
+    const after = await prisma.opportunity.findMany({ where: { conversationId: TEST_CONVERSATION_ID } });
+    expect(after).toEqual(before);
+  });
+
   it("returns 404 for a conversation that does not exist", async () => {
     await request(app.getHttpServer())
       .post("/dev/interpretation/evaluate")

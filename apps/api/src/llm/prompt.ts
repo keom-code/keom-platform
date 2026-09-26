@@ -27,7 +27,7 @@ JSON schema:
   "confidence": number (0 to 1)
 }`;
 
-const MAX_MESSAGE_LENGTH = 1000;
+export const MAX_MESSAGE_LENGTH = 1000;
 
 export function buildUserPrompt(context: CommercialContext): string {
   const transcript = context.messages
