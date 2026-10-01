@@ -70,9 +70,9 @@ const SIGNAL_CRITERIA: Record<SignalType, SignalCriteria> = {
     no: "The customer only asks about availability, prices or information, has not accepted a slot, or no booking is discussed.",
   },
   PURCHASE_INTENT: {
-    question: "Does the customer commit to buying or ordering a product or service?",
-    yes: "The customer decides to buy or order (e.g. 'lo quiero', 'me llevo dos', 'quiero comprarlo', 'mándamelo').",
-    no: "The customer only asks about a product, its price or stock, without deciding to buy.",
+    question: "Does the customer commit to buying or ordering a product?",
+    yes: "The customer decides to buy or order a product (e.g. 'lo quiero', 'me llevo dos', 'quiero comprarlo', 'mándamelo', 'sepárame uno').",
+    no: "The customer only asks about a product, its price, stock or how to pay, without deciding to buy. Booking, confirming, rescheduling or keeping an appointment, reservation or visit is a booking, not a purchase, even when it will be paid.",
   },
   QUOTE_REQUESTED: {
     question: "Does the customer ask for a quote or a custom estimate for their specific need?",
@@ -90,9 +90,9 @@ const SIGNAL_CRITERIA: Record<SignalType, SignalCriteria> = {
     no: "The customer does not ask to continue later.",
   },
   OBJECTION: {
-    question: "Does the customer raise a concern or hesitation while still considering the offer?",
-    yes: "The customer is still considering the offer but raises a concern: price too high, timing, distance, doubts, or comparing with competitors (e.g. 'está caro', 'lo voy a pensar', 'en otro lado es más barato').",
-    no: "The customer raises no concern, or has fully declined. A customer who has definitively declined is not raising an objection.",
+    question: "Does the customer state a concern or hesitation about the offer while still considering it?",
+    yes: "The customer explicitly states a concern about the offer: price too high, bad timing, no money right now, distance, doubts about quality, or a cheaper competitor (e.g. 'está caro', 'lo voy a pensar', 'ahorita no tengo plata', 'en otro lado es más barato').",
+    no: "The customer states no concern: neutral questions about price, availability, payment or details, requests, confirmations and thanks are not objections; a denied concern (e.g. 'no tengo problema con el precio') is not an objection; a customer who has definitively declined is not raising an objection.",
   },
   NO_LONGER_INTERESTED: {
     question: "In the customer's most recent stance, has the customer definitively declined, cancelled or withdrawn?",

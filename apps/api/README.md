@@ -499,10 +499,12 @@ only visible difference is the dev endpoint's `interpretation.entities`.
 - A signal is present when p ≥ 0.8, confidently absent when p ≤ 0.2, and **uncertain**
   in between. `NO_LONGER_INTERESTED` uses 0.9 / 0.1 because M2A deactivates on it.
 - Intent/interest Choices need Jev-reported confidence ≥ 0.5.
-- Any uncertain answer throws `UNCERTAIN_OUTPUT`, so M2A is never called. Uncertainty
-  never becomes a successful `signals: []`, which is returned only when every signal is
-  confidently absent. Missing/mistyped answers or out-of-range probabilities throw
-  `INVALID_OUTPUT`.
+- An uncertain intent/interest answer or an uncertain `NO_LONGER_INTERESTED` throws
+  `UNCERTAIN_OUTPUT`, so M2A is never called and nothing is deactivated on a guess. An
+  uncertain low-stakes signal (every other signal, which only nudges score/priority) is
+  left out of `signals` instead; its raw probability stays in the diagnostics. (Until
+  2026-10-01 every uncertain answer failed, which rejected 26 of the 50 eval cases.)
+  Missing/mistyped answers or out-of-range probabilities throw `INVALID_OUTPUT`.
 - The single `confidence` field is a **Jev-specific heuristic**: the minimum of the two
   Choice confidences and each signal's |2p − 1|. It is not calibrated and not comparable
   with OpenAI's self-reported confidence. M2A does not read it; it is only stored on

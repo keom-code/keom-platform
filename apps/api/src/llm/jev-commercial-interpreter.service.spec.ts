@@ -169,9 +169,19 @@ describe("JevCommercialInterpreter", () => {
     });
   });
 
-  describe("uncertainty (never a silent empty success)", () => {
-    it("throws UNCERTAIN_OUTPUT when a signal falls inside its uncertainty band", async () => {
-      const systemOne = jest.fn().mockResolvedValue(jevResponse({ signals: { PRICING_REQUESTED: 0.5 } }));
+  describe("uncertainty (never a deactivation)", () => {
+    it("leaves out a low-stakes signal inside its uncertainty band instead of failing", async () => {
+      const systemOne = jest.fn().mockResolvedValue(
+        jevResponse({ signals: { PRICING_REQUESTED: 0.5, OBJECTION: 0.6, AVAILABILITY_REQUESTED: 0.97 } }),
+      );
+
+      const result = await new TestableInterpreter(systemOne).interpret(context);
+
+      expect(result.signals).toEqual(["AVAILABILITY_REQUESTED"]);
+    });
+
+    it("throws UNCERTAIN_OUTPUT when NO_LONGER_INTERESTED falls inside its band, even on the 'no' side", async () => {
+      const systemOne = jest.fn().mockResolvedValue(jevResponse({ signals: { NO_LONGER_INTERESTED: 0.15 } }));
 
       await expect(new TestableInterpreter(systemOne).interpret(context)).rejects.toMatchObject({ code: "UNCERTAIN_OUTPUT" });
     });
@@ -199,7 +209,7 @@ describe("JevCommercialInterpreter", () => {
     });
 
     it("attaches diagnostics (raw evidence, usage) to the UNCERTAIN_OUTPUT error for the evaluation runner", async () => {
-      const systemOne = jest.fn().mockResolvedValue(jevResponse({ signals: { OBJECTION: 0.6 } }));
+      const systemOne = jest.fn().mockResolvedValue(jevResponse({ signals: { NO_LONGER_INTERESTED: 0.6 } }));
 
       const error = await new TestableInterpreter(systemOne).interpret(context).catch((err: unknown) => err);
 

@@ -25,9 +25,10 @@ import { buildUserPrompt } from "./prompt";
  *   providers see identical context (same last-10 messages, 1000-char cap, role tags).
  * - `entities` is always `{}`: Jev does not generate free text, and entity extraction is
  *   deferred for this experiment (M2A and the mapper ignore entities).
- * - Uncertainty never becomes an empty success: any answer inside its threshold band
- *   throws UNCERTAIN_OUTPUT, so InterpretationService never reaches M2A (see
- *   jev-thresholds.ts).
+ * - Uncertainty never becomes a deactivation: an uncertain intent/interest answer or an
+ *   uncertain NO_LONGER_INTERESTED throws UNCERTAIN_OUTPUT, so InterpretationService
+ *   never reaches M2A. An uncertain low-stakes signal is left out instead (see
+ *   jev-thresholds.ts); its raw probability stays in the diagnostics.
  * - `confidence` is a Jev-specific heuristic — the weakest of the two Choice confidences
  *   and each signal's decisiveness |2p - 1| — not a calibrated probability and not
  *   comparable with OpenAI's self-reported confidence.
@@ -141,9 +142,9 @@ export function mapJevAnswers(answers: JevAnswers, diagnostics?: InterpretationD
   const signals: SignalType[] = [];
   for (const signal of SIGNAL_TYPES) {
     const p = answers[signal].noul;
-    const { yesAt, noAt } = JEV_SIGNAL_THRESHOLDS[signal];
+    const { yesAt, noAt, onUncertain } = JEV_SIGNAL_THRESHOLDS[signal];
     if (p >= yesAt) signals.push(signal);
-    else if (p > noAt) uncertain.push(`${signal}(p=${p})`);
+    else if (p > noAt && onUncertain === "fail") uncertain.push(`${signal}(p=${p})`);
   }
 
   if (uncertain.length > 0) {
