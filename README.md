@@ -2,6 +2,9 @@
 
 Monorepo for KEOM: a control/visibility layer for sellers and business owners on top of monitored WhatsApp Business conversations.
 
+**Want to see it working?** Follow [`docs/DEMO-M2B.md`](./docs/DEMO-M2B.md) (Spanish, ~10 min):
+a WhatsApp message goes in, the AI interprets it and the engine scores the opportunity.
+
 Start with [`docs/SYSTEM.md`](./docs/SYSTEM.md) for a system-wide overview (diagram +
 milestone status) tying `apps/web` and `apps/api` together. For the detailed docs:
 
