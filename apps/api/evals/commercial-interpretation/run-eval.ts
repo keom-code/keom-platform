@@ -3,6 +3,7 @@
  *
  *   pnpm --filter @keom/api eval:interpreters -- [--providers openai,jev] [--tag negation]
  *                                               [--concurrency 2] [--include-drafts]
+ *                                               [--dataset dataset.holdout-v1.json]
  *
  * Calls the interpreter classes directly — no Nest app, no Prisma, no HTTP — so nothing
  * is ever written to Opportunity tables (do NOT benchmark via /dev/interpretation/evaluate).
@@ -23,7 +24,7 @@ import { EvalCase, loadDataset, toCommercialContext } from "./dataset";
 import { CallStatus, CaseResult, ProviderSummary, summarize } from "./metrics";
 import { renderMarkdownReport } from "./report";
 
-const DATASET_PATH = join(__dirname, "dataset.v1.json");
+const DEFAULT_DATASET = "dataset.v1.json";
 const RESULTS_DIR = join(__dirname, "results");
 
 interface RunOptions {
@@ -31,16 +32,19 @@ interface RunOptions {
   tag?: string;
   concurrency: number;
   includeDrafts: boolean;
+  /** File name inside this directory. */
+  dataset: string;
 }
 
 function parseArgs(argv: string[]): RunOptions {
-  const options: RunOptions = { providers: ["openai", "jev"], concurrency: 2, includeDrafts: false };
+  const options: RunOptions = { providers: ["openai", "jev"], concurrency: 2, includeDrafts: false, dataset: DEFAULT_DATASET };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === "--providers") options.providers = (argv[++i] ?? "").split(",").map((p) => p.trim()) as LlmProvider[];
     else if (arg === "--tag") options.tag = argv[++i];
     else if (arg === "--concurrency") options.concurrency = Number(argv[++i]);
     else if (arg === "--include-drafts") options.includeDrafts = true;
+    else if (arg === "--dataset") options.dataset = argv[++i] ?? "";
     else if (arg !== "--") throw new Error(`Unknown argument "${arg}"`);
   }
   for (const provider of options.providers) {
@@ -101,7 +105,7 @@ async function mapWithConcurrency<T, R>(items: T[], limit: number, fn: (item: T)
 
 async function main(): Promise<void> {
   const options = parseArgs(process.argv.slice(2));
-  const dataset = loadDataset(DATASET_PATH);
+  const dataset = loadDataset(join(__dirname, options.dataset));
 
   const drafts = dataset.cases.filter((evalCase) => evalCase.review.status !== "reviewed");
   let cases = options.includeDrafts ? dataset.cases : dataset.cases.filter((evalCase) => evalCase.review.status === "reviewed");

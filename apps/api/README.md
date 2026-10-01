@@ -531,7 +531,13 @@ export TYPESAFE_API_KEY=... JEV_MODEL=jev-1.13.0
 pnpm --filter @keom/api eval:interpreters                        # reviewed cases, both providers
 pnpm --filter @keom/api eval:interpreters -- --providers jev --tag negation
 pnpm --filter @keom/api eval:interpreters -- --include-drafts     # smoke run on unreviewed labels
+pnpm --filter @keom/api eval:interpreters -- --dataset dataset.holdout-v1.json  # held-out set
 ```
+
+`dataset.holdout-v1.json` (42 cases) is a **held-out** set: it is never used to tune Jev
+questions or thresholds, which were tuned on `dataset.v1.json`. Freeze changes first, then
+score it once; if you tune again after looking at its failures, it stops being held out
+and a new held-out set is needed.
 
 Results go to `evals/commercial-interpretation/results/` (gitignored): a JSON file with
 per-case predictions, errors, usage and raw Jev probabilities, plus a Markdown summary.
