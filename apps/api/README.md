@@ -553,6 +553,32 @@ The report never picks a winner.
 **Rollback:** set `LLM_PROVIDER=openai`, which takes effect on the next call with no
 restart and no data migration.
 
+**Outcome (2026-10-01): no-go, OpenAI stays the default.** On the 42-case held-out set
+(`gpt-5.6-luna`, reasoning effort `none`, vs `jev-1.13.0`, thresholds `2026-10-01.provisional`):
+
+| | Luna | Jev |
+|---|---|---|
+| Answered | 42/42 | 33/42 (9 `UNCERTAIN_OUTPUT`) |
+| Exact signal set, answered | 76% | 79% |
+| False `NO_LONGER_INTERESTED` | 0 | 0 |
+| Real bookings missed | 0 | 2 (gray-zone `BOOKING_INTENT` dropped) |
+| p95 latency | 1.6 s | 0.56 s |
+| Estimated cost / call | ~$0.0001 | ~$0.00013 (≈10× the input tokens: 11 questions) |
+
+Jev was accurate when it answered and never deactivated on a guess, but it declined about
+1 in 5 messages and was not cheaper; its only clear gain, latency, does not matter for
+background interpretation. A Jev-first/OpenAI-fallback hybrid would cost more than OpenAI
+alone. The Jev code stays as an opt-in for a later re-check (e.g. if latency or volume
+starts to matter, or a newer Jev handles Spanish better). Before any real customer data
+goes to Jev, TypeSafe's data-handling terms still need review.
+
+The evaluation also exposed OpenAI prompt gaps (overrated interest, `PRICING_REQUESTED`
+from business-quoted prices, money hesitation read as purchase/cancellation). Adding
+signal and interest definitions to `SYSTEM_PROMPT` raised Luna to 100% interest-level
+accuracy and 92% / 90% exact signal sets on v1 / held-out, with 0 false deactivations, at
+~$0.00018 per call (longer prompt). The held-out set has now informed that prompt change,
+so a new held-out set is needed before the next round of prompt tuning.
+
 ### Not in M2B (future milestones)
 
 **M3:** business knowledge, documents, chunks, embeddings, pgvector, retrieval, RAG.
