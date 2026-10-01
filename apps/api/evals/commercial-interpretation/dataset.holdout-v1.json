@@ -33,9 +33,9 @@
       ],
       "notes": "Opener with no request yet.",
       "review": {
-        "status": "draft",
-        "reviewer": null,
-        "reviewedAt": null
+        "status": "reviewed",
+        "reviewer": "carlos.vallejos",
+        "reviewedAt": "2026-10-01"
       }
     },
     {
@@ -55,9 +55,9 @@
         "signals": []
       },
       "review": {
-        "status": "draft",
-        "reviewer": null,
-        "reviewedAt": null
+        "status": "reviewed",
+        "reviewer": "carlos.vallejos",
+        "reviewedAt": "2026-10-01"
       }
     },
     {
@@ -81,9 +81,9 @@
         "MEDIUM"
       ],
       "review": {
-        "status": "draft",
-        "reviewer": null,
-        "reviewedAt": null
+        "status": "reviewed",
+        "reviewer": "carlos.vallejos",
+        "reviewedAt": "2026-10-01"
       }
     },
     {
@@ -108,9 +108,9 @@
       ],
       "notes": "Opening hours, not availability of a slot.",
       "review": {
-        "status": "draft",
-        "reviewer": null,
-        "reviewedAt": null
+        "status": "reviewed",
+        "reviewer": "carlos.vallejos",
+        "reviewedAt": "2026-10-01"
       }
     },
     {
@@ -132,9 +132,9 @@
         ]
       },
       "review": {
-        "status": "draft",
-        "reviewer": null,
-        "reviewedAt": null
+        "status": "reviewed",
+        "reviewer": "carlos.vallejos",
+        "reviewedAt": "2026-10-01"
       }
     },
     {
@@ -165,9 +165,9 @@
         ]
       },
       "review": {
-        "status": "draft",
-        "reviewer": null,
-        "reviewedAt": null
+        "status": "reviewed",
+        "reviewer": "carlos.vallejos",
+        "reviewedAt": "2026-10-01"
       }
     },
     {
@@ -193,9 +193,9 @@
         "PURCHASE"
       ],
       "review": {
-        "status": "draft",
-        "reviewer": null,
-        "reviewedAt": null
+        "status": "reviewed",
+        "reviewer": "carlos.vallejos",
+        "reviewedAt": "2026-10-01"
       }
     },
     {
@@ -219,9 +219,9 @@
       },
       "notes": "Custom job estimate, not a list price.",
       "review": {
-        "status": "draft",
-        "reviewer": null,
-        "reviewedAt": null
+        "status": "reviewed",
+        "reviewer": "carlos.vallejos",
+        "reviewedAt": "2026-10-01"
       }
     },
     {
@@ -243,9 +243,9 @@
         ]
       },
       "review": {
-        "status": "draft",
-        "reviewer": null,
-        "reviewedAt": null
+        "status": "reviewed",
+        "reviewer": "carlos.vallejos",
+        "reviewedAt": "2026-10-01"
       }
     },
     {
@@ -272,9 +272,9 @@
         "INFORMATION"
       ],
       "review": {
-        "status": "draft",
-        "reviewer": null,
-        "reviewedAt": null
+        "status": "reviewed",
+        "reviewer": "carlos.vallejos",
+        "reviewedAt": "2026-10-01"
       }
     },
     {
@@ -303,9 +303,9 @@
       },
       "notes": "Accepts an offered slot.",
       "review": {
-        "status": "draft",
-        "reviewer": null,
-        "reviewedAt": null
+        "status": "reviewed",
+        "reviewer": "carlos.vallejos",
+        "reviewedAt": "2026-10-01"
       }
     },
     {
@@ -332,9 +332,9 @@
         ]
       },
       "review": {
-        "status": "draft",
-        "reviewer": null,
-        "reviewedAt": null
+        "status": "reviewed",
+        "reviewer": "carlos.vallejos",
+        "reviewedAt": "2026-10-01"
       }
     },
     {
@@ -362,9 +362,9 @@
         ]
       },
       "review": {
-        "status": "draft",
-        "reviewer": null,
-        "reviewedAt": null
+        "status": "reviewed",
+        "reviewer": "carlos.vallejos",
+        "reviewedAt": "2026-10-01"
       }
     },
     {
@@ -392,9 +392,9 @@
       },
       "notes": "Keeps the booking; 'no la canceles' is not a cancellation.",
       "review": {
-        "status": "draft",
-        "reviewer": null,
-        "reviewedAt": null
+        "status": "reviewed",
+        "reviewer": "carlos.vallejos",
+        "reviewedAt": "2026-10-01"
       }
     },
     {
@@ -423,9 +423,9 @@
       ],
       "notes": "Commits to rescheduling while asking if the new slot works.",
       "review": {
-        "status": "draft",
-        "reviewer": null,
-        "reviewedAt": null
+        "status": "reviewed",
+        "reviewer": "carlos.vallejos",
+        "reviewedAt": "2026-10-01"
       }
     },
     {
@@ -447,9 +447,9 @@
         ]
       },
       "review": {
-        "status": "draft",
-        "reviewer": null,
-        "reviewedAt": null
+        "status": "reviewed",
+        "reviewer": "carlos.vallejos",
+        "reviewedAt": "2026-10-01"
       }
     },
     {
@@ -471,9 +471,9 @@
         ]
       },
       "review": {
-        "status": "draft",
-        "reviewer": null,
-        "reviewedAt": null
+        "status": "reviewed",
+        "reviewer": "carlos.vallejos",
+        "reviewedAt": "2026-10-01"
       }
     },
     {
@@ -504,9 +504,9 @@
         ]
       },
       "review": {
-        "status": "draft",
-        "reviewer": null,
-        "reviewedAt": null
+        "status": "reviewed",
+        "reviewer": "carlos.vallejos",
+        "reviewedAt": "2026-10-01"
       }
     },
     {
@@ -538,9 +538,9 @@
       },
       "notes": "Booking a paid service is a booking, not a purchase.",
       "review": {
-        "status": "draft",
-        "reviewer": null,
-        "reviewedAt": null
+        "status": "reviewed",
+        "reviewer": "carlos.vallejos",
+        "reviewedAt": "2026-10-01"
       }
     },
     {
@@ -568,9 +568,9 @@
         "OTHER"
       ],
       "review": {
-        "status": "draft",
-        "reviewer": null,
-        "reviewedAt": null
+        "status": "reviewed",
+        "reviewer": "carlos.vallejos",
+        "reviewedAt": "2026-10-01"
       }
     },
     {
@@ -606,9 +606,9 @@
         "PURCHASE"
       ],
       "review": {
-        "status": "draft",
-        "reviewer": null,
-        "reviewedAt": null
+        "status": "reviewed",
+        "reviewer": "carlos.vallejos",
+        "reviewedAt": "2026-10-01"
       }
     },
     {
@@ -632,9 +632,9 @@
       },
       "notes": "Has paid and asks to confirm the order; no payment question.",
       "review": {
-        "status": "draft",
-        "reviewer": null,
-        "reviewedAt": null
+        "status": "reviewed",
+        "reviewer": "carlos.vallejos",
+        "reviewedAt": "2026-10-01"
       }
     },
     {
@@ -668,9 +668,9 @@
         "MEDIUM"
       ],
       "review": {
-        "status": "draft",
-        "reviewer": null,
-        "reviewedAt": null
+        "status": "reviewed",
+        "reviewer": "carlos.vallejos",
+        "reviewedAt": "2026-10-01"
       }
     },
     {
@@ -697,9 +697,9 @@
         "MEDIUM"
       ],
       "review": {
-        "status": "draft",
-        "reviewer": null,
-        "reviewedAt": null
+        "status": "reviewed",
+        "reviewer": "carlos.vallejos",
+        "reviewedAt": "2026-10-01"
       }
     },
     {
@@ -731,9 +731,9 @@
       ],
       "notes": "Like v1 negation-003: still interested, money concern.",
       "review": {
-        "status": "draft",
-        "reviewer": null,
-        "reviewedAt": null
+        "status": "reviewed",
+        "reviewer": "carlos.vallejos",
+        "reviewedAt": "2026-10-01"
       }
     },
     {
@@ -759,9 +759,9 @@
       ],
       "notes": "Denied concern, then a details question.",
       "review": {
-        "status": "draft",
-        "reviewer": null,
-        "reviewedAt": null
+        "status": "reviewed",
+        "reviewer": "carlos.vallejos",
+        "reviewedAt": "2026-10-01"
       }
     },
     {
@@ -787,9 +787,9 @@
         "MEDIUM"
       ],
       "review": {
-        "status": "draft",
-        "reviewer": null,
-        "reviewedAt": null
+        "status": "reviewed",
+        "reviewer": "carlos.vallejos",
+        "reviewedAt": "2026-10-01"
       }
     },
     {
@@ -817,9 +817,9 @@
       ],
       "notes": "Asks to continue later; no concern about the offer.",
       "review": {
-        "status": "draft",
-        "reviewer": null,
-        "reviewedAt": null
+        "status": "reviewed",
+        "reviewer": "carlos.vallejos",
+        "reviewedAt": "2026-10-01"
       }
     },
     {
@@ -841,9 +841,9 @@
         ]
       },
       "review": {
-        "status": "draft",
-        "reviewer": null,
-        "reviewedAt": null
+        "status": "reviewed",
+        "reviewer": "carlos.vallejos",
+        "reviewedAt": "2026-10-01"
       }
     },
     {
@@ -874,9 +874,9 @@
         "BOOKING"
       ],
       "review": {
-        "status": "draft",
-        "reviewer": null,
-        "reviewedAt": null
+        "status": "reviewed",
+        "reviewer": "carlos.vallejos",
+        "reviewedAt": "2026-10-01"
       }
     },
     {
@@ -900,9 +900,9 @@
       },
       "notes": "Peruvian 'ya fue' here = forget it. Compare v1 slang-002 where 'ya fue' = let's go.",
       "review": {
-        "status": "draft",
-        "reviewer": null,
-        "reviewedAt": null
+        "status": "reviewed",
+        "reviewer": "carlos.vallejos",
+        "reviewedAt": "2026-10-01"
       }
     },
     {
@@ -930,9 +930,9 @@
         "HIGH"
       ],
       "review": {
-        "status": "draft",
-        "reviewer": null,
-        "reviewedAt": null
+        "status": "reviewed",
+        "reviewer": "carlos.vallejos",
+        "reviewedAt": "2026-10-01"
       }
     },
     {
@@ -960,9 +960,9 @@
       ],
       "notes": "Hesitation, not a decline.",
       "review": {
-        "status": "draft",
-        "reviewer": null,
-        "reviewedAt": null
+        "status": "reviewed",
+        "reviewer": "carlos.vallejos",
+        "reviewedAt": "2026-10-01"
       }
     },
     {
@@ -994,9 +994,9 @@
       },
       "notes": "Cancellation reversed.",
       "review": {
-        "status": "draft",
-        "reviewer": null,
-        "reviewedAt": null
+        "status": "reviewed",
+        "reviewer": "carlos.vallejos",
+        "reviewedAt": "2026-10-01"
       }
     },
     {
@@ -1031,9 +1031,9 @@
         "PURCHASE"
       ],
       "review": {
-        "status": "draft",
-        "reviewer": null,
-        "reviewedAt": null
+        "status": "reviewed",
+        "reviewer": "carlos.vallejos",
+        "reviewedAt": "2026-10-01"
       }
     },
     {
@@ -1053,9 +1053,9 @@
         "signals": []
       },
       "review": {
-        "status": "draft",
-        "reviewer": null,
-        "reviewedAt": null
+        "status": "reviewed",
+        "reviewer": "carlos.vallejos",
+        "reviewedAt": "2026-10-01"
       }
     },
     {
@@ -1088,9 +1088,9 @@
       ],
       "notes": "A thumbs-up to a business question is too weak to count as booking.",
       "review": {
-        "status": "draft",
-        "reviewer": null,
-        "reviewedAt": null
+        "status": "reviewed",
+        "reviewer": "carlos.vallejos",
+        "reviewedAt": "2026-10-01"
       }
     },
     {
@@ -1113,9 +1113,9 @@
         ]
       },
       "review": {
-        "status": "draft",
-        "reviewer": null,
-        "reviewedAt": null
+        "status": "reviewed",
+        "reviewer": "carlos.vallejos",
+        "reviewedAt": "2026-10-01"
       }
     },
     {
@@ -1138,9 +1138,9 @@
         ]
       },
       "review": {
-        "status": "draft",
-        "reviewer": null,
-        "reviewedAt": null
+        "status": "reviewed",
+        "reviewer": "carlos.vallejos",
+        "reviewedAt": "2026-10-01"
       }
     },
     {
@@ -1161,9 +1161,9 @@
       },
       "notes": "Non-text placeholder; nothing to interpret.",
       "review": {
-        "status": "draft",
-        "reviewer": null,
-        "reviewedAt": null
+        "status": "reviewed",
+        "reviewer": "carlos.vallejos",
+        "reviewedAt": "2026-10-01"
       }
     },
     {
@@ -1187,9 +1187,9 @@
         "MEDIUM"
       ],
       "review": {
-        "status": "draft",
-        "reviewer": null,
-        "reviewedAt": null
+        "status": "reviewed",
+        "reviewer": "carlos.vallejos",
+        "reviewedAt": "2026-10-01"
       }
     },
     {
@@ -1253,9 +1253,9 @@
       },
       "notes": "11 messages: the oldest falls outside the 10-message window.",
       "review": {
-        "status": "draft",
-        "reviewer": null,
-        "reviewedAt": null
+        "status": "reviewed",
+        "reviewer": "carlos.vallejos",
+        "reviewedAt": "2026-10-01"
       }
     }
   ]
