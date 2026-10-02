@@ -23,6 +23,23 @@ export interface EvaluateOpportunityResult {
   evaluation: EvaluationResult;
 }
 
+export interface ReevaluateOpportunityRequest {
+  opportunityId: string;
+  companyId: string;
+  now?: Date;
+}
+
+/** Outcome of a timer-triggered re-evaluation (M4). Only CHANGED wrote anything. */
+export type ReevaluationOutcome =
+  /** No opportunity with this id for this company (deleted, or a tenant mismatch). */
+  | { status: "NOT_FOUND" }
+  /** Deactivated or superseded since the job was scheduled. */
+  | { status: "INACTIVE"; opportunity: Opportunity }
+  /** Never evaluated with evidence, so there is nothing to re-run M2A on. */
+  | { status: "NOT_EVALUATED"; opportunity: Opportunity }
+  | { status: "UNCHANGED"; opportunity: Opportunity; evaluation: EvaluationResult }
+  | { status: "CHANGED"; opportunity: Opportunity; evaluation: EvaluationResult; previous: Opportunity };
+
 @Injectable()
 export class OpportunitiesService {
   private readonly logger = new Logger(OpportunitiesService.name);
@@ -61,23 +78,56 @@ export class OpportunitiesService {
     });
 
     await this.persistSignals(opportunity.id, request.signals);
-    await this.persistStateChangeIfAny(opportunity, evaluation);
-    await this.persistActionRecommendationIfChanged(opportunity.id, evaluation);
-
-    const updated = await this.prisma.opportunity.update({
-      where: { id: opportunity.id },
-      data: {
-        state: evaluation.state as unknown as PrismaOpportunityState,
-        priority: evaluation.priority as unknown as PrismaPriority,
-        risk: evaluation.risk as unknown as PrismaRiskLevel,
-        interestLevel: request.interestLevel as unknown as PrismaInterestLevel,
-        score: evaluation.score,
-        isActive: evaluation.deactivate ? false : opportunity.isActive,
-        lastEvaluatedAt: request.now ?? new Date(),
-      },
+    const updated = await this.persistEvaluation(opportunity, evaluation, {
+      interestLevel: request.interestLevel,
+      currentSignals: request.signals.map((signal) => signal.type),
+      evaluatedAt: request.now ?? new Date(),
     });
 
     return { opportunity: updated, evaluation };
+  }
+
+  /**
+   * M4 entry point: re-run the same deterministic engine on the opportunity's current
+   * evidence (`currentSignals` + `interestLevel` from its latest evaluation) with FRESH
+   * timestamps read from the conversation's messages now — nothing captured when the job
+   * was scheduled is trusted. Writes nothing unless the result differs from what is
+   * persisted, and never inserts OpportunitySignal rows (there is no new evidence). All
+   * reads are scoped by companyId, so a job can never touch another tenant's data.
+   */
+  async reevaluate(request: ReevaluateOpportunityRequest): Promise<ReevaluationOutcome> {
+    const opportunity = await this.prisma.opportunity.findFirst({ where: { id: request.opportunityId, companyId: request.companyId } });
+    if (!opportunity) return { status: "NOT_FOUND" };
+    if (!opportunity.isActive) return { status: "INACTIVE", opportunity };
+    if (!opportunity.interestLevel) return { status: "NOT_EVALUATED", opportunity };
+
+    const [lastInbound, lastOutbound] = await Promise.all(
+      (["INBOUND", "OUTBOUND"] as const).map((direction) =>
+        this.prisma.message.findFirst({
+          where: { conversationId: opportunity.conversationId, companyId: request.companyId, direction },
+          orderBy: { sentAt: "desc" },
+          select: { sentAt: true },
+        }),
+      ),
+    );
+
+    const evaluation = this.engine.evaluate({
+      interestLevel: opportunity.interestLevel as unknown as EvaluateOpportunityInput["interestLevel"],
+      signals: opportunity.currentSignals.map((type) => ({ type: type as unknown as OpportunitySignalInput["type"] })),
+      lastInboundAt: lastInbound?.sentAt,
+      lastOutboundAt: lastOutbound?.sentAt,
+      now: request.now,
+    });
+
+    if (await this.isUnchanged(opportunity, evaluation)) {
+      return { status: "UNCHANGED", opportunity, evaluation };
+    }
+
+    const updated = await this.persistEvaluation(opportunity, evaluation, {
+      interestLevel: opportunity.interestLevel as unknown as EvaluateOpportunityInput["interestLevel"],
+      evaluatedAt: request.now ?? new Date(),
+    });
+    return { status: "CHANGED", opportunity: updated, evaluation, previous: opportunity };
   }
 
   /**
@@ -118,6 +168,45 @@ export class OpportunitiesService {
         sourceMessageId: signal.sourceMessageId,
       })),
     });
+  }
+
+  /** Shared by evaluate() and reevaluate(): state history (on change), action
+   * recommendation (on change), then the opportunity row itself. */
+  private async persistEvaluation(
+    opportunity: Opportunity,
+    evaluation: EvaluationResult,
+    data: { interestLevel: EvaluateOpportunityInput["interestLevel"]; currentSignals?: OpportunitySignalInput["type"][]; evaluatedAt: Date },
+  ): Promise<Opportunity> {
+    await this.persistStateChangeIfAny(opportunity, evaluation);
+    await this.persistActionRecommendationIfChanged(opportunity.id, evaluation);
+
+    return this.prisma.opportunity.update({
+      where: { id: opportunity.id },
+      data: {
+        state: evaluation.state as unknown as PrismaOpportunityState,
+        priority: evaluation.priority as unknown as PrismaPriority,
+        risk: evaluation.risk as unknown as PrismaRiskLevel,
+        interestLevel: data.interestLevel as unknown as PrismaInterestLevel,
+        score: evaluation.score,
+        isActive: evaluation.deactivate ? false : opportunity.isActive,
+        lastEvaluatedAt: data.evaluatedAt,
+        ...(data.currentSignals && { currentSignals: data.currentSignals as unknown as PrismaSignalType[] }),
+      },
+    });
+  }
+
+  private async isUnchanged(opportunity: Opportunity, evaluation: EvaluationResult): Promise<boolean> {
+    if (
+      evaluation.deactivate ||
+      opportunity.state !== (evaluation.state as unknown as PrismaOpportunityState) ||
+      opportunity.priority !== (evaluation.priority as unknown as PrismaPriority) ||
+      opportunity.risk !== (evaluation.risk as unknown as PrismaRiskLevel) ||
+      opportunity.score !== evaluation.score
+    ) {
+      return false;
+    }
+    const latest = await this.prisma.actionRecommendation.findFirst({ where: { opportunityId: opportunity.id }, orderBy: { createdAt: "desc" } });
+    return latest?.action === (evaluation.nextBestAction as unknown as PrismaNextBestAction);
   }
 
   /** Only inserts a history row when the state actually changes — reevaluating to the

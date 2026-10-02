@@ -6,6 +6,7 @@ import { WhatsappModule } from "./whatsapp/whatsapp.module";
 import { OpportunitiesModule } from "./opportunities/opportunities.module";
 import { InterpretationModule } from "./interpretation/interpretation.module";
 import { KnowledgeModule } from "./knowledge/knowledge.module";
+import { ReevaluationWorkerModule } from "./reevaluation/reevaluation-worker.module";
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { KnowledgeModule } from "./knowledge/knowledge.module";
     OpportunitiesModule,
     InterpretationModule,
     KnowledgeModule,
+    ReevaluationWorkerModule,
   ],
 })
 export class AppModule {}

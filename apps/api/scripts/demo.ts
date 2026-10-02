@@ -40,7 +40,13 @@ const SAAS_KNOWLEDGE = [
 ];
 
 const prisma = new PrismaClient();
-const customerPhone = `519${randomInt(10_000_000, 99_999_999)}`;
+interface Customer {
+  name: string;
+  phone: string;
+}
+
+const newPhone = () => `519${randomInt(10_000_000, 99_999_999)}`;
+const ANDREA: Customer = { name: "Andrea", phone: newPhone() };
 const runId = Date.now();
 let messageCount = 0;
 
@@ -92,7 +98,7 @@ async function call<T = any>(method: string, path: string, body?: unknown): Prom
 }
 
 /** M1: deliver a customer message through the real WhatsApp webhook path. */
-async function customerSays(text: string): Promise<string> {
+async function customerSays(text: string, customer: Customer = ANDREA): Promise<string> {
   messageCount += 1;
   await call("POST", "/webhooks/whatsapp", {
     object: "whatsapp_business_account",
@@ -105,10 +111,10 @@ async function customerSays(text: string): Promise<string> {
             value: {
               messaging_product: "whatsapp",
               metadata: { display_phone_number: "51999888777", phone_number_id: WHATSAPP_DEMO_PHONE_NUMBER_ID },
-              contacts: [{ profile: { name: "Andrea Torres" }, wa_id: customerPhone }],
+              contacts: [{ profile: { name: customer.name }, wa_id: customer.phone }],
               messages: [
                 {
-                  from: customerPhone,
+                  from: customer.phone,
                   id: `wamid.demo-${runId}-${messageCount}`,
                   timestamp: String(Math.floor(Date.now() / 1000)),
                   type: "text",
@@ -123,17 +129,17 @@ async function customerSays(text: string): Promise<string> {
   });
 
   const conversation = await prisma.conversation.findFirstOrThrow({
-    where: { companyId: CLINIC_ID, customer: { externalId: customerPhone } },
+    where: { companyId: CLINIC_ID, customer: { externalId: customer.phone } },
     include: { _count: { select: { messages: true } } },
   });
-  say("Andrea:", `"${text}"`);
+  say(`${customer.name}:`, `"${text}"`);
   tech("M1 webhook", `mensaje guardado (conversación ${conversation.id}, ${conversation._count.messages} mensaje(s))`);
   return conversation.id;
 }
 
 /** M2B interprets the conversation, M2A decides; returns the interpretation for M3. */
 async function interpretAndDecide(conversationId: string) {
-  const { interpretation, opportunity } = await call("POST", "/dev/interpretation/evaluate", { conversationId });
+  const { interpretation, opportunity, reevaluation } = await call("POST", "/dev/interpretation/evaluate", { conversationId });
   tech("M2B interpretación", { intent: interpretation.intent, interest: interpretation.interestLevel, signals: interpretation.signals, entities: interpretation.entities });
   if (opportunity.noOp) {
     tech("M2A decisión", "sin señales comerciales: no se crea oportunidad");
@@ -141,8 +147,31 @@ async function interpretAndDecide(conversationId: string) {
     tech("M2A decisión", { state: opportunity.state, priority: opportunity.priority, risk: opportunity.risk, score: opportunity.score, nextBestAction: opportunity.nextBestAction });
     tech("M2A motivo", opportunity.reasons.action);
   }
-  return interpretation;
+  describeSchedule(reevaluation);
+  return { interpretation, opportunityId: opportunity.opportunityId as string | undefined, reevaluation: reevaluation as Schedule | null };
 }
+
+interface Schedule {
+  status: "SCHEDULED" | "NOTHING_TO_SCHEDULE" | "DISABLED" | "FAILED";
+  jobs: { trigger: string; scheduledFor: string }[];
+  error?: string;
+}
+
+/** M4: what the evaluation scheduled for later. */
+function describeSchedule(schedule: Schedule | null) {
+  if (!schedule) return;
+  const jobs = schedule.jobs.map((job) => `${job.trigger} a las ${new Date(job.scheduledFor).toLocaleTimeString()}`).join("; ");
+  tech("M4 reevaluación", schedule.status === "SCHEDULED" ? `programada: ${jobs}` : `${schedule.status}${schedule.error ? ` (${schedule.error})` : ""}`);
+}
+
+async function opportunityState(opportunityId: string) {
+  return prisma.opportunity.findUniqueOrThrow({
+    where: { id: opportunityId },
+    select: { state: true, risk: true, priority: true, score: true, lastEvaluatedAt: true },
+  });
+}
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /** M3 suggests a reply grounded only in the clinic's knowledge. */
 async function suggestReply(conversationId: string, interpretation?: unknown) {
@@ -182,7 +211,7 @@ async function search(companyId: string, query: string) {
 
 async function main() {
   console.log(bold("\nKEOM — demo completa (M1 → M2B → M2A → M3)"));
-  console.log(dim(`API: ${API} · clienta de prueba: Andrea Torres (${customerPhone})`));
+  console.log(dim(`API: ${API} · clienta de prueba: Andrea (${ANDREA.phone})`));
 
   step(
     "PASO 1 — La clínica carga su información",
@@ -195,7 +224,7 @@ async function main() {
     "La IA entiende qué quiere, el motor decide qué hacer y KEOM sugiere qué responder con datos reales de la clínica.",
   );
   let conversationId = await customerSays("Hola, ¿cuánto cuesta la depilación de piernas y atienden el sábado?");
-  let interpretation = await interpretAndDecide(conversationId);
+  let { interpretation } = await interpretAndDecide(conversationId);
   await suggestReply(conversationId, interpretation);
 
   step(
@@ -203,7 +232,7 @@ async function main() {
     "La oportunidad sube de prioridad. KEOM sabe el horario general, pero no confirma un turno libre: eso es un dato en vivo (calendario) que todavía no tenemos.",
   );
   conversationId = await customerSays("Perfecto, resérvame este sábado a las 3 pm por favor");
-  interpretation = await interpretAndDecide(conversationId);
+  ({ interpretation } = await interpretAndDecide(conversationId));
   await suggestReply(conversationId, interpretation);
 
   step(
@@ -211,7 +240,7 @@ async function main() {
     "KEOM usa otro documento de la clínica (la política de cancelación) para responder.",
   );
   conversationId = await customerSays("¿Y si al final no puedo ir, puedo cancelar sin costo?");
-  interpretation = await interpretAndDecide(conversationId);
+  ({ interpretation } = await interpretAndDecide(conversationId));
   await suggestReply(conversationId, interpretation);
 
   step(
@@ -219,7 +248,7 @@ async function main() {
     "Si la información no existe, KEOM no inventa: no sugiere nada y el vendedor responde.",
   );
   conversationId = await customerSays("Otra consulta: ¿hacen envíos de productos a provincia?");
-  interpretation = await interpretAndDecide(conversationId);
+  ({ interpretation } = await interpretAndDecide(conversationId));
   await suggestReply(conversationId, interpretation);
 
   step(
@@ -235,7 +264,64 @@ async function main() {
   tech("misma búsqueda en Clínica Demo", clinic.chunks.map((c) => `${c.title} (similitud ${c.similarity.toFixed(2)})`).join("; ") || "sin resultados (aislada)");
   tech("umbral de similitud", clinic.minSimilarity);
 
+  await timePasses();
+
   console.log(`\n${bold("Fin.")} ${dim("Nada se envió por WhatsApp: KEOM solo sugiere. Ver docs/DEMO.md para leer cada paso.")}\n`);
+}
+
+/**
+ * M4: two customers ask to book; the business answers only one of them. When the scheduled
+ * checks fire, M2A re-evaluates both on fresh data. Needs the API started with REDIS_URL and,
+ * to fit in a demo, short M2A thresholds (docs/DEMO.md, "Preparar").
+ */
+async function timePasses() {
+  step(
+    "PASO 7 — El tiempo pasa: ¿alguien respondió?",
+    "Dos clientas quieren reservar. El negocio le responde solo a una. KEOM vuelve a mirar las dos más tarde: la que quedó sin respuesta pasa a riesgo; la otra no.",
+  );
+  const lucia: Customer = { name: "Lucía", phone: newPhone() };
+  const mateo: Customer = { name: "Mateo", phone: newPhone() };
+
+  const luciaConversation = await customerSays("Sí, quiero reservar para el sábado", lucia);
+  const luciaResult = await interpretAndDecide(luciaConversation);
+  const mateoConversation = await customerSays("Sí, quiero reservar para el sábado", mateo);
+  const mateoResult = await interpretAndDecide(mateoConversation);
+
+  await call("POST", `/dev/conversations/${mateoConversation}/business-replies`, { companyId: CLINIC_ID, text: "¡Hola Mateo! Te reservo el sábado." });
+  say("Negocio a Mateo:", `"¡Hola Mateo! Te reservo el sábado."`);
+  tech("respuesta del negocio", "registrada como mensaje OUTBOUND (endpoint de desarrollo; no se envía nada)");
+
+  const schedule = luciaResult.reevaluation;
+  if (!schedule || schedule.status !== "SCHEDULED" || !luciaResult.opportunityId || !mateoResult.opportunityId) {
+    tech("M4", `no hay chequeos programados (${schedule?.status ?? "sin oportunidad"}). Arranca la API con REDIS_URL para ver este paso.`);
+    return;
+  }
+  const lastCheck = Math.max(...schedule.jobs.map((job) => Date.parse(job.scheduledFor)));
+  const waitMs = lastCheck - Date.now() + 5_000;
+  if (waitMs > 5 * 60_000) {
+    tech("M4", `el último chequeo corre a las ${new Date(lastCheck).toLocaleTimeString()} (umbrales por defecto 1h/4h). Para verlo ahora usa OPPORTUNITY_STALL_MEDIUM_MINUTES=1 y OPPORTUNITY_STALL_HIGH_MINUTES=2.`);
+    return;
+  }
+
+  const before = { lucia: await opportunityState(luciaResult.opportunityId), mateo: await opportunityState(mateoResult.opportunityId) };
+  process.stdout.write(`  ${dim(`Esperando ${Math.round(waitMs / 1000)}s a que corran los chequeos `)}`);
+  for (let waited = 0; waited < waitMs; waited += 10_000) {
+    await sleep(Math.min(10_000, waitMs - waited));
+    process.stdout.write(dim("."));
+  }
+  console.log();
+
+  for (const [name, id, previous] of [
+    ["Lucía (sin respuesta)", luciaResult.opportunityId, before.lucia],
+    ["Mateo (le respondieron)", mateoResult.opportunityId, before.mateo],
+  ] as const) {
+    const now = await opportunityState(id);
+    const changed = now.state !== previous.state || now.risk !== previous.risk;
+    tech(
+      `M4 → M2A ${name}`,
+      `${previous.state}/riesgo ${previous.risk} → ${now.state}/riesgo ${now.risk}${changed ? "" : " (sin cambios: no se escribió nada)"}`,
+    );
+  }
 }
 
 main()

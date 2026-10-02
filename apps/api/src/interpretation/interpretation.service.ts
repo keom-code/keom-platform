@@ -1,12 +1,16 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import { CommercialInterpreter, CommercialInterpretation, COMMERCIAL_INTERPRETER } from "../llm/commercial-interpreter";
 import { EvaluateOpportunityResult, OpportunitiesService } from "../opportunities/opportunities.service";
+import { ReevaluationScheduler } from "../reevaluation/reevaluation-scheduler.service";
+import { ReevaluationSchedule } from "../reevaluation/reevaluation.types";
 import { ContextBuilderService } from "./context-builder.service";
 import { mapInterpretationToOpportunityInput } from "./interpretation.mapper";
 
 export interface InterpretationOutcome {
   interpretation: CommercialInterpretation;
   result: EvaluateOpportunityResult | null;
+  /** M4 time-based checks scheduled after this evaluation; null when nothing was evaluated. */
+  reevaluation: ReevaluationSchedule | null;
 }
 
 /**
@@ -26,6 +30,7 @@ export class InterpretationService {
     private readonly contextBuilder: ContextBuilderService,
     @Inject(COMMERCIAL_INTERPRETER) private readonly interpreter: CommercialInterpreter,
     private readonly opportunities: OpportunitiesService,
+    private readonly reevaluation: ReevaluationScheduler,
   ) {}
 
   async evaluate(conversationId: string): Promise<InterpretationOutcome> {
@@ -46,8 +51,10 @@ export class InterpretationService {
     const result = await this.opportunities.evaluate(mapped);
     if (!result) {
       this.logger.log(`No commercial evidence and no active Opportunity for conversationId=${conversationId}; no-op`);
+      return { interpretation, result, reevaluation: null };
     }
 
-    return { interpretation, result };
+    const reevaluation = await this.reevaluation.scheduleAfterEvaluation(result.opportunity);
+    return { interpretation, result, reevaluation };
   }
 }

@@ -1,6 +1,7 @@
 import { Test } from "@nestjs/testing";
 import { COMMERCIAL_INTERPRETER, CommercialInterpretation, InterpretationError } from "../llm/commercial-interpreter";
 import { OpportunitiesService } from "../opportunities/opportunities.service";
+import { ReevaluationScheduler } from "../reevaluation/reevaluation-scheduler.service";
 import { ContextBuilderService } from "./context-builder.service";
 import { InterpretationService } from "./interpretation.service";
 
@@ -32,11 +33,13 @@ describe("InterpretationService", () => {
   let contextBuilder: { build: jest.Mock };
   let interpreter: { interpret: jest.Mock };
   let opportunities: { evaluate: jest.Mock };
+  let reevaluation: { scheduleAfterEvaluation: jest.Mock };
 
   beforeEach(async () => {
     contextBuilder = { build: jest.fn().mockResolvedValue(builtContext) };
     interpreter = { interpret: jest.fn().mockResolvedValue(interpretation()) };
     opportunities = { evaluate: jest.fn().mockResolvedValue({ opportunity: { id: "opportunity-1" }, evaluation: {} }) };
+    reevaluation = { scheduleAfterEvaluation: jest.fn().mockResolvedValue({ status: "DISABLED", jobs: [] }) };
 
     const moduleRef = await Test.createTestingModule({
       providers: [
@@ -44,6 +47,7 @@ describe("InterpretationService", () => {
         { provide: ContextBuilderService, useValue: contextBuilder },
         { provide: COMMERCIAL_INTERPRETER, useValue: interpreter },
         { provide: OpportunitiesService, useValue: opportunities },
+        { provide: ReevaluationScheduler, useValue: reevaluation },
       ],
     }).compile();
 
@@ -93,6 +97,15 @@ describe("InterpretationService", () => {
 
     expect(outcome.result).toBeNull();
     expect(outcome.interpretation).toEqual(interpretation());
+    expect(outcome.reevaluation).toBeNull();
+    expect(reevaluation.scheduleAfterEvaluation).not.toHaveBeenCalled();
+  });
+
+  it("schedules M4 re-evaluation for the evaluated opportunity and returns the schedule", async () => {
+    const outcome = await service.evaluate(CONVERSATION_ID);
+
+    expect(reevaluation.scheduleAfterEvaluation).toHaveBeenCalledWith({ id: "opportunity-1" });
+    expect(outcome.reevaluation).toEqual({ status: "DISABLED", jobs: [] });
   });
 
   it("never calls OpportunitiesService.evaluate when interpretation fails, and propagates the error", async () => {

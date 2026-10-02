@@ -4,8 +4,9 @@ Monorepo for KEOM: a control/visibility layer for sellers and business owners on
 
 **Want to see it working?** Follow [`docs/DEMO.md`](./docs/DEMO.md) (Spanish, ~10 min, one
 command: `pnpm --filter @keom/api demo`): a WhatsApp message goes in, the AI interprets it,
-the engine decides what to do with the opportunity, and KEOM suggests a reply grounded only
-in that business's own knowledge. Updated at the end of every milestone.
+the engine decides what to do with the opportunity, KEOM suggests a reply grounded only in
+that business's own knowledge, and re-checks the opportunity later to catch it going cold.
+Updated at the end of every milestone.
 
 Start with [`docs/SYSTEM.md`](./docs/SYSTEM.md) for a system-wide overview (diagram +
 milestone status) tying `apps/web` and `apps/api` together. For the detailed docs:
@@ -15,7 +16,8 @@ milestone status) tying `apps/web` and `apps/api` together. For the detailed doc
   cover `apps/api`.
 - [`apps/api/README.md`](./apps/api/README.md) — backend architecture and milestones
   (M1 WhatsApp ingestion, M2A deterministic Opportunity Engine, M2B LLM Commercial
-  Interpretation Layer, M3 Business Knowledge / RAG with pgvector).
+  Interpretation Layer, M3 Business Knowledge / RAG with pgvector, M4 Temporal
+  Re-evaluation with BullMQ/Redis).
 
 ## Structure
 

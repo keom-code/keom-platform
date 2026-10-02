@@ -1,10 +1,11 @@
 # Demo KEOM — todo lo construido hasta ahora
 
-**Estado:** M1 + M2A + M2B + M3 · **Última actualización:** 2026-10-01 (cierre de M3)
+**Estado:** M1 + M2A + M2B + M3 + M4 · **Última actualización:** 2026-10-02 (cierre de M4)
 
 Una sola historia, de punta a punta, para el equipo técnico: llega un mensaje de WhatsApp,
 la IA lo interpreta, el motor decide qué hacer con la oportunidad y KEOM sugiere qué responder
-usando solo la información que cargó el negocio. Cada paso se explica en dos niveles:
+usando solo la información que cargó el negocio; y si nadie responde, KEOM vuelve a mirar la
+oportunidad más tarde y detecta que se está enfriando. Cada paso se explica en dos niveles:
 **Negocio** (qué significa) y **Técnico** (qué pasó por dentro).
 
 > **Mantener esta demo:** al cerrar cada milestone, actualizar esta guía y
@@ -18,8 +19,10 @@ Mensaje de WhatsApp
    ├─ M1   Ingesta        guarda cliente, conversación y mensaje            src/whatsapp, src/ingestion
    ├─ M2B  Interpretación la IA entiende qué quiere el cliente (señales)    src/llm, src/interpretation
    ├─ M2A  Motor          decide estado, prioridad, riesgo, siguiente acción src/opportunities
-   └─ M3   Conocimiento   busca info verificada del negocio y sugiere        src/knowledge
-                          una respuesta basada solo en ella (no la envía)
+   ├─ M3   Conocimiento   busca info verificada del negocio y sugiere        src/knowledge
+   │                      una respuesta basada solo en ella (no la envía)
+   └─ M4   Tiempo         decide CUÁNDO volver a mirar la oportunidad y      src/reevaluation
+                          le pide a M2A que la reevalúe con datos frescos
 ```
 
 | Capa | Pregunta que responde | Usa IA | Decide |
@@ -27,6 +30,7 @@ Mensaje de WhatsApp
 | M2B | ¿Qué quiere decir el cliente? | Sí (OpenAI) | No, solo interpreta |
 | M2A | ¿Qué debería pasar comercialmente? | No (reglas fijas) | Sí |
 | M3 | ¿Qué información verificada del negocio sirve aquí? | Sí (embeddings + OpenAI) | No, solo sugiere |
+| M4 | ¿Cuándo hay que volver a mirar esta oportunidad? | No (temporizadores en Redis) | No, le pide a M2A que reevalúe |
 
 ## 1. Preparar (una sola vez)
 
@@ -36,7 +40,7 @@ Necesitas Docker Desktop, Node 20+, pnpm y una API key de OpenAI. Desde la raíz
 pnpm install
 cd apps/api
 cp .env.example .env
-docker compose up -d        # Postgres 16 + pgvector (un solo contenedor)
+docker compose up -d        # Postgres 16 + pgvector, y Redis (M4)
 pnpm prisma:migrate         # crea las tablas
 pnpm prisma:seed            # crea "Clínica Demo" (con WhatsApp de prueba) y "SaaS Demo"
 ```
@@ -50,6 +54,16 @@ OPENAI_MODEL=gpt-5.6-luna
 OPENAI_REASONING_EFFORT=none
 EMBEDDING_PROVIDER=openai
 OPENAI_EMBEDDING_MODEL=text-embedding-3-small
+REDIS_URL=redis://localhost:6380
+```
+
+Para la demo (paso 7), que KEOM considere "sin respuesta" en minutos y no en horas. Agrega
+esto solo en tu `.env` local, nunca en producción:
+
+```
+OPPORTUNITY_STALL_MEDIUM_MINUTES=1
+OPPORTUNITY_STALL_HIGH_MINUTES=2
+REEVALUATION_GRACE_SECONDS=5
 ```
 
 `.env` está en `.gitignore`. Una corrida completa cuesta menos de un centavo de dólar.
@@ -74,9 +88,9 @@ cd apps/api
 pnpm demo
 ```
 
-Se puede correr las veces que quieras sin reiniciar la base: cada corrida usa una clienta
-con un número nuevo (conversación y oportunidad nuevas) y recarga el conocimiento de los dos
-negocios de prueba.
+Se puede correr las veces que quieras sin reiniciar la base: cada corrida usa clientes con
+números nuevos (conversaciones y oportunidades nuevas) y recarga el conocimiento de los dos
+negocios de prueba. Tarda unos 3 minutos: el paso 7 espera a que corran los chequeos de M4.
 
 ## 3. Qué vas a ver (salida real, resumida)
 
@@ -174,6 +188,34 @@ negocio solo ve su propia información.
 búsqueda filtra por `companyId`, y la base rechaza un fragmento cuyo `companyId` no coincida
 con el de su documento (FK compuesta).
 
+### Paso 7 — El tiempo pasa: ¿alguien respondió?
+
+```
+Lucía: "Sí, quiero reservar para el sábado"
+M2B/M2A:          BOOKING_INTENT · interés HIGH · ENGAGED · riesgo LOW · score 50
+M4 reevaluación:  programada: NO_BUSINESS_REPLY a las 6:18:03 PM; NO_BUSINESS_REPLY a las 6:19:03 PM
+Mateo: "Sí, quiero reservar para el sábado"   (lo mismo, con sus propios chequeos)
+Negocio a Mateo:  "¡Hola Mateo! Te reservo el sábado."   (registrado; no se envía nada)
+Esperando 127s a que corran los chequeos .............
+M4 → M2A Lucía (sin respuesta):       ENGAGED/riesgo LOW → AT_RISK/riesgo HIGH
+M4 → M2A Mateo (le respondieron):     ENGAGED/riesgo LOW → ENGAGED/riesgo LOW (sin cambios: no se escribió nada)
+```
+
+**Negocio:** dos clientas piden reservar. A Mateo el negocio le responde; a Lucía, nadie.
+Pasado el tiempo, KEOM detecta que la oportunidad de Lucía se está enfriando (`AT_RISK`) y la
+de Mateo no. Es la alerta de "venta que se puede perder" que el vendedor verá cuando existan
+notificaciones (M5).
+
+**Técnico:** cada evaluación programa chequeos en Redis (BullMQ) justo después de los umbrales
+de M2A (aquí 1 y 2 minutos; en producción 1h y 4h). Cuando un chequeo corre, M4 no decide
+nada: recarga la oportunidad y los mensajes frescos desde Postgres y llama a
+`OpportunitiesService.reevaluate()`, que usa el mismo motor determinístico de M2A. Para Mateo,
+M2A ve la respuesta del negocio y devuelve el mismo resultado, así que no se escribe nada. Los
+chequeos de Andrea (pasos 2-5) también corren en segundo plano.
+
+Si la API corre sin `REDIS_URL`, este paso lo explica y se salta; con los umbrales por defecto
+(1h/4h) muestra a qué hora correrán los chequeos en vez de esperar.
+
 ## 4. Hallazgos conocidos
 
 Lo que la demo muestra hoy y todavía no está bien. Actualizar esta lista en cada corrida
@@ -186,6 +228,10 @@ relevante.
 | M2B → M3 | Las señales y entidades de M2B son de toda la conversación, no del último mensaje | `requiresLiveVerification` queda en `true` en pasos que ya no preguntan disponibilidad | Revisar cuando se automatice el flujo (M4) |
 | M3 | Contenido en otro idioma que el cliente puntúa ~0.1 más bajo | Puede quedar bajo el umbral 0.35 y responder `INSUFFICIENT_KNOWLEDGE` | Cargar el conocimiento en el idioma de los clientes |
 | M3 | Las sugerencias a veces repiten datos ya dados (paso 3) | Respuestas algo largas | Ajuste de prompt si molesta en uso real |
+| M4 | KEOM no ve las respuestas reales del vendedor (solo el endpoint de desarrollo las registra) | En uso real, toda oportunidad con interés alto terminaría `AT_RISK` | Capturar respuestas del negocio (statuses/echoes de Meta) antes de usar M4 con clientes |
+| M4 | No existe `NO_CUSTOMER_REPLY` (el cliente dejó de responder después del negocio) | Ese caso no se detecta | Primero una regla en M2A, luego el disparador en M4 |
+| M2A | "Sí, quiero reservar" sola da score 50 → `ENGAGED`, no `HIGH_INTENT` | Una reserva clara no se ve como alta intención hasta que pregunte disponibilidad | Revisar pesos de M2A si negocio lo considera necesario |
+| M4 | Si Redis pierde sus datos, los chequeos programados se pierden | Oportunidades que no se reevalúan | Persistencia AOF ya activa; un "barrido" de recuperación queda pendiente |
 | Todas | Las salidas del LLM varían un poco entre corridas | Los textos no son idénticos a esta guía | Esperado; la estructura y los estados sí deben coincidir |
 
 ## 5. Probar a mano
@@ -201,6 +247,8 @@ Todos los endpoints son de desarrollo (`/dev/...`, sin autenticación). Detalle 
 | M3 | `POST/GET/PUT/DELETE /dev/knowledge/documents` | Cargar, ver, reemplazar y borrar conocimiento |
 | M3 | `POST /dev/knowledge/search` | Buscar en el conocimiento de un negocio |
 | M3 | `POST /dev/knowledge/suggest-response` | Respuesta sugerida para una conversación |
+| M4 | `POST /dev/opportunities/:id/reevaluations` | Programar un chequeo a una hora concreta (`FOLLOW_UP_DUE`) |
+| M4 | `POST /dev/conversations/:id/business-replies` | Registrar que el negocio respondió (no envía nada) |
 
 Ejemplo, buscar en la clínica:
 
@@ -210,8 +258,14 @@ curl -s -X POST http://localhost:3001/dev/knowledge/search \
   -d '{"companyId":"00000000-0000-4000-8000-000000000001","query":"¿cuánto cuesta?"}'
 ```
 
-Ver los datos guardados (clientes, conversaciones, mensajes, oportunidades, documentos y
-fragmentos):
+Ver los chequeos programados en Redis:
+
+```bash
+docker compose exec redis redis-cli ZRANGE bull:opportunity-reevaluation:delayed 0 -1
+```
+
+Ver los datos guardados (clientes, conversaciones, mensajes, oportunidades con su historial de
+estados, documentos y fragmentos):
 
 ```bash
 pnpm prisma:studio
@@ -220,8 +274,11 @@ pnpm prisma:studio
 ## 6. Qué falta (próximas fases)
 
 - **Fase 11:** conectar el dashboard (`apps/web`) a esta API, para ver esto en pantalla.
-- **M4:** flujo automático (llega el mensaje → se interpreta y sugiere solo), colas,
-  reevaluación por tiempo, oportunidades estancadas.
+- **Respuestas reales del vendedor:** hoy KEOM no ve cuándo el negocio responde por WhatsApp
+  (por eso existe el endpoint de desarrollo). Hasta capturarlas, M4 marcaría todo como "sin
+  respuesta".
+- **Flujo automático:** llega el mensaje → se interpreta, decide y sugiere solo (hoy son
+  llamadas manuales a `/dev/...`).
 - **M5:** notificaciones, aprobación del vendedor, escalamiento.
 - **M6:** enviar la respuesta por WhatsApp.
 - **Integraciones:** calendario, stock, pedidos y pagos para datos en vivo.

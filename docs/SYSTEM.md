@@ -10,7 +10,8 @@ where each piece is documented in depth. For the actual decisions/conventions, g
 - **Frontend architecture** (decisions, folder structure, route map, phases) →
   [`docs/ARCHITECTURE.md`](./ARCHITECTURE.md)
 - **Backend architecture and milestones** (M1 ingestion, M2A deterministic engine, M2B
-  LLM interpretation, M3 business knowledge / RAG, local setup, testing) → [`apps/api/README.md`](../apps/api/README.md)
+  LLM interpretation, M3 business knowledge / RAG, M4 temporal re-evaluation, local setup,
+  testing) → [`apps/api/README.md`](../apps/api/README.md)
 
 ---
 
@@ -28,6 +29,9 @@ flowchart TD
     LLM --> Mapper["Mapper<br/>interpretation → M2A input<br/>thin, no business logic"]
     Mapper --> Engine["OpportunityEngineService<br/>apps/api/src/opportunities — M2A<br/>deterministic: score → priority → state → risk → next best action"]
     Engine --> DB
+    Engine -.->|"after each evaluation"| Scheduler["ReevaluationScheduler<br/>apps/api/src/reevaluation — M4<br/>decides WHEN to look again (BullMQ/Redis)"]
+    Scheduler -->|"delayed job fires"| Worker["ReevaluationProcessor — M4<br/>reloads fresh state, no decisions"]
+    Worker -->|"OpportunitiesService.reevaluate()"| Engine
 
     DB --> Knowledge["Knowledge / RAG<br/>apps/api/src/knowledge — M3<br/>company-scoped pgvector retrieval,<br/>optional grounded suggestion (never sent)"]
 
@@ -49,6 +53,7 @@ marks work that hasn't happened yet, not a live connection.
 | Ingestion | Tenant resolution, `RawEvent`/`Customer`/`Conversation`/`Message` persistence | `apps/api/src/ingestion` |
 | LLM interpretation | Turning conversation text into structured signals — **interprets, never decides** | `apps/api/src/llm`, `apps/api/src/interpretation` |
 | Opportunity engine | Score/priority/state/risk/next-best-action — **fully deterministic, no LLM** | `apps/api/src/opportunities` |
+| Temporal re-evaluation | **When** to re-check an opportunity (after M2A's stall checkpoints, explicit follow-ups); fires M2A on fresh data — **never decides risk/state itself** | `apps/api/src/reevaluation` |
 | Business knowledge (RAG) | Company documents → chunks → embeddings (pgvector), company-scoped retrieval, optional grounded suggestion — **supplies facts, never decides or sends** | `apps/api/src/knowledge` (+ providers in `apps/api/src/llm`) |
 | Dashboard | Seller/admin UI, currently mock-driven | `apps/web` |
 | Shared FE↔BE types | Not yet consumed by `apps/api` — see `apps/api/README.md`'s note on this | `packages/contracts` |
@@ -62,4 +67,5 @@ marks work that hasn't happened yet, not a live connection.
 | M2B — LLM Commercial Interpretation Layer | Done | `apps/api/README.md` |
 | Phase 11 — wire `apps/web` to real `apps/api` | Not started | `docs/ARCHITECTURE.md` |
 | M3 — Business Knowledge / RAG (pgvector) | Done | `apps/api/README.md` |
-| Redis/BullMQ, scheduled reevaluation, notifications, outbound WhatsApp | Not started | — |
+| M4 — Temporal Re-evaluation (BullMQ/Redis) | Done | `apps/api/README.md` |
+| M5 notifications / seller approval, M6 outbound WhatsApp | Not started | — |

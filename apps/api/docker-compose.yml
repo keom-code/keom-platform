@@ -16,5 +16,23 @@ services:
       timeout: 5s
       retries: 10
 
+  # M4: BullMQ backend for delayed opportunity re-evaluation jobs. AOF persistence so
+  # scheduled jobs survive a container restart. Port 6380 to avoid clashing with a
+  # locally installed Redis, same reasoning as Postgres on 5433.
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6380:6379"
+    volumes:
+      - keom_api_redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
 volumes:
   keom_api_postgres:
+  keom_api_redis:

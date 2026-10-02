@@ -10,6 +10,7 @@ import {
   ScoreBreakdownEntry,
   SignalType,
 } from "./opportunities.types";
+import { formatDuration, loadStallThresholds } from "./stall-thresholds";
 
 /** Signal -> score weight. Not exhaustive by design: OBJECTION/NO_LONGER_INTERESTED are
  * commercially negative, so they subtract instead of adding — without this, "signals are
@@ -37,12 +38,6 @@ const PRIORITY_THRESHOLDS: { min: number; priority: Priority }[] = [
   { min: 40, priority: "MEDIUM" },
   { min: 0, priority: "LOW" },
 ];
-
-/** No scheduler in M2A: risk is evaluated synchronously from timestamps already on the
- * request, using these fixed thresholds. Automatic/periodic reevaluation is a later
- * milestone (see apps/api/README.md). */
-const STALL_HIGH_THRESHOLD_MS = 4 * 60 * 60 * 1000;
-const STALL_MEDIUM_THRESHOLD_MS = 60 * 60 * 1000;
 
 @Injectable()
 export class OpportunityEngineService {
@@ -124,8 +119,9 @@ export class OpportunityEngineService {
 
   /**
    * Risk answers "is this stalling?", not "how important is it?" (Priority). Evaluated
-   * synchronously from `lastInboundAt`/`lastOutboundAt` already on the request — no
-   * background timer/scheduler in M2A.
+   * synchronously from `lastInboundAt`/`lastOutboundAt` on the input, against the stall
+   * thresholds in stall-thresholds.ts. M2A has no timer: M4 re-invokes this through
+   * OpportunitiesService.reevaluate() when a threshold may have been crossed.
    */
   private computeRisk(input: EvaluateOpportunityInput, priority: Priority): { risk: RiskLevel; riskReason: string } {
     const eligible = input.interestLevel === "HIGH" || priority === "HIGH";
@@ -144,17 +140,18 @@ export class OpportunityEngineService {
 
     const now = input.now ?? new Date();
     const elapsedMs = now.getTime() - input.lastInboundAt.getTime();
+    const { mediumMs, highMs } = loadStallThresholds();
 
-    if (elapsedMs > STALL_HIGH_THRESHOLD_MS) {
+    if (elapsedMs > highMs) {
       return {
         risk: "HIGH",
-        riskReason: `No business response for over ${STALL_HIGH_THRESHOLD_MS / 3_600_000}h since the last inbound message.`,
+        riskReason: `No business response for over ${formatDuration(highMs)} since the last inbound message.`,
       };
     }
-    if (elapsedMs > STALL_MEDIUM_THRESHOLD_MS) {
+    if (elapsedMs > mediumMs) {
       return {
         risk: "MEDIUM",
-        riskReason: `No business response for over ${STALL_MEDIUM_THRESHOLD_MS / 3_600_000}h since the last inbound message.`,
+        riskReason: `No business response for over ${formatDuration(mediumMs)} since the last inbound message.`,
       };
     }
     return { risk: "LOW", riskReason: "Still within the normal reply window." };

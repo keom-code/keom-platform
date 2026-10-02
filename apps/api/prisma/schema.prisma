@@ -219,6 +219,10 @@ model Opportunity {
   interestLevel   InterestLevel?    @map("interest_level")
   score           Int               @default(0)
   isActive        Boolean           @default(true) @map("is_active")
+  /// M4: the signal set of the latest evidence-bearing evaluation (M2A dev endpoint or
+  /// M2B), so a timer-triggered re-evaluation can rerun M2A on the same evidence with
+  /// fresh timestamps. OpportunitySignal rows stay the append-only history.
+  currentSignals  SignalType[]      @default([]) @map("current_signals")
   lastEvaluatedAt DateTime?         @map("last_evaluated_at")
   createdAt       DateTime          @default(now()) @map("created_at")
   updatedAt       DateTime          @updatedAt @map("updated_at")

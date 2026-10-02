@@ -190,9 +190,10 @@ milestone should introduce a real terminal state once outcomes are tracked.
 - **Risk** — evaluated synchronously from `lastInboundAt`/`lastOutboundAt` on the request,
   **no scheduler/background worker in M2A**: `HIGH` only if interest/priority is `HIGH`,
   there's an inbound message with no later outbound reply, and the elapsed time exceeds a
-  fixed threshold (4h `HIGH`, 1h `MEDIUM`). A future milestone can call
-  `OpportunitiesService.evaluate`/`OpportunityEngineService.evaluate` periodically (e.g.
-  from a BullMQ worker) — that scheduling is explicitly out of scope here.
+  threshold (4h `HIGH`, 1h `MEDIUM` by default; `OPPORTUNITY_STALL_HIGH_MINUTES` /
+  `OPPORTUNITY_STALL_MEDIUM_MINUTES`, see `src/opportunities/stall-thresholds.ts`). M4
+  re-invokes M2A through `OpportunitiesService.reevaluate()` when a threshold may have been
+  crossed (see the M4 section).
 - **Next Best Action** — first-match ordered rules: `OBJECTION` → `ESCALATE_TO_HUMAN`;
   `BOOKING_INTENT` + `AVAILABILITY_REQUESTED` → `OFFER_APPOINTMENT`; `HIGH` priority +
   `HIGH` risk → `FOLLOW_UP`; `PRICING_REQUESTED`/`QUOTE_REQUESTED` → `SEND_INFORMATION`;
@@ -902,11 +903,215 @@ chunk, `requiresLiveVerification: true`. After deleting the FAQ → `INSUFFICIEN
 
 ### Not in M3 (future milestones)
 
-**M4:** Redis/BullMQ, async ingestion (and a document status column), delayed
-reevaluation, timers, stale-opportunity detection. **M5:** notifications, seller approval
+**M4** (done, see below): Redis/BullMQ, delayed reevaluation, stale-opportunity detection.
+**Later for M3:** async ingestion (and a document status column). **M5:** notifications, seller approval
 workflow, escalation. **M6:** outbound WhatsApp. **Later:** calendar/inventory/CRM/payment/
 order integrations for live data, PDF/file parsing, OCR, semantic chunking, query rewriting,
 ANN index, citation UI, recovered revenue.
+
+---
+
+## Milestone 4 — Temporal Re-evaluation / Stalled Opportunity Detection
+
+M4 scope: after an opportunity is evaluated, schedule future checks; when one fires, reload
+fresh state from PostgreSQL and hand the opportunity back to M2A. The split:
+
+- **M4 decides WHEN** an opportunity is looked at again (timing + orchestration).
+- **M2A decides WHAT** the current situation means (score, priority, state, risk, next best
+  action). No such rule exists in M4 code — M4 doesn't even read the stall thresholds'
+  meaning, only the moments at which M2A's answer can change.
+
+No notifications, no outbound WhatsApp, no automatic replies, no frontend changes.
+Webhook → M2B is still a manual call (`/dev/interpretation/evaluate`); automating it is a
+separate decision (LLM cost per message).
+
+### Architecture
+
+```
+M2A dev endpoint / M2B evaluation succeeds
+        ↓
+ReevaluationScheduler  (src/reevaluation)  fresh message timestamps + M2A stall checkpoints
+        ↓
+Redis (BullMQ delayed jobs, queue "opportunity-reevaluation")
+        ↓  time passes
+ReevaluationProcessor  (BullMQ Worker, inside the API process)
+        ↓
+OpportunitiesService.reevaluate()  (M2A)  reload fresh, tenant-scoped → same
+        OpportunityEngineService → write only if the result changed
+```
+
+- `ReevaluationSchedulerModule` (producer: `ReevaluationQueue`, `ReevaluationScheduler`) is
+  imported by `OpportunitiesModule` and `InterpretationModule`. It doesn't import
+  `OpportunitiesModule`, which avoids a circular dependency.
+- `ReevaluationWorkerModule` (consumer: `ReevaluationProcessor`) imports `OpportunitiesModule`.
+- Plain `bullmq` + `ioredis` (no `@nestjs/bullmq`), so the queue and worker are created only
+  when Redis is configured.
+
+### Changes to M2A (small, deliberate)
+
+1. **`Opportunity.currentSignals`** (`signal_type[]`, migration
+   `add_opportunity_current_signals`): the signal set of the latest evidence-bearing
+   evaluation. M2A scores only the signals it is given, so a timer-triggered re-evaluation
+   with no new message must re-run on the same evidence; passing `[]` would wrongly reset
+   the opportunity to `NEW`. `OpportunitySignal` rows remain the append-only history.
+2. **`OpportunitiesService.reevaluate({ opportunityId, companyId, now })`**: loads the
+   opportunity by `{id, companyId}`, reads the latest inbound/outbound `Message.sentAt`
+   fresh, runs the same `OpportunityEngineService`, and persists through the same private
+   helpers as `evaluate()` (state history on change, action recommendation on change). It
+   never inserts `OpportunitySignal` rows and **writes nothing if state, priority, risk,
+   score and action are unchanged** (`lastEvaluatedAt` included). Outcomes: `NOT_FOUND`
+   (missing or tenant mismatch), `INACTIVE`, `NOT_EVALUATED`, `UNCHANGED`, `CHANGED`.
+3. **Stall thresholds are env-configurable** (`OPPORTUNITY_STALL_MEDIUM_MINUTES=60`,
+   `OPPORTUNITY_STALL_HIGH_MINUTES=240` by default — unchanged behavior) and exposed as
+   `stallCheckpointsMs()`. Reason strings keep the original wording ("over 4h").
+
+### Triggers and scheduling policy
+
+| Trigger | Scheduled when | Fires at |
+|---|---|---|
+| `NO_BUSINESS_REPLY` | After a successful evaluation whose conversation's last inbound message has no later outbound one | `lastInboundAt + checkpoint + REEVALUATION_GRACE_SECONDS` for each M2A checkpoint (1h, 4h); past ones skipped |
+| `GENERAL_REEVALUATION` | After a successful evaluation of an active opportunity | `now + REEVALUATION_ACTIVE_AFTER_HOURS` (24h, `0` disables), rounded up to the hour. One-shot safety net |
+| `FOLLOW_UP_DUE` | Explicit: `POST /dev/opportunities/:id/reevaluations {companyId, at}` | `at` (future, ≤ 90 days) |
+
+- Timing is generic; nothing is per industry.
+- Scheduling a check at 30 minutes would be useless with today's M2A (nothing changes before
+  the 1h threshold), which is why M4 schedules **at M2A's own checkpoints** instead of an
+  independent constant.
+- Re-evaluations never schedule further jobs, so there are no reschedule loops.
+- **Not implemented, on purpose:** `NO_CUSTOMER_REPLY` (customer silent after the business
+  replied). M2A has no rule for it ("business already responded" → risk LOW), so the trigger
+  would always be a no-op. Add the M2A rule first, then the trigger.
+
+### Job payload and idempotency
+
+```ts
+{ v: 1, companyId, opportunityId, trigger, anchorAt, scheduledFor }   // ids and timing only
+jobId = `reeval-${opportunityId}-${trigger}-${scheduledForEpochMs}`   // deterministic
+```
+
+- The same schedule requested twice gets the same job id; BullMQ ignores an add whose id
+  exists. Completed jobs are kept 7 days so duplicates within that window stay no-ops.
+- Processing is idempotent anyway: M2A is deterministic over fresh state, and an unchanged
+  result writes nothing. No distributed locks.
+
+### Obsolete jobs
+
+Never cancelled; the worker always reloads first and completes as a no-op when the
+opportunity is gone or belongs to another company (`NOT_FOUND`, logged as WARN), was
+deactivated or superseded (`INACTIVE`), or M2A's result is the same as before (`UNCHANGED`,
+e.g. the business replied in the meantime).
+
+### Redis, config and failure behavior
+
+- `docker-compose.yml` runs `redis:7-alpine` on port 6380 with AOF persistence.
+- **`REDIS_URL` unset → M4 disabled**: the API boots, logs a WARN, and dev responses include
+  `"reevaluation": { "status": "DISABLED" }`. Never silent.
+- **`REDIS_URL` set → queue + worker start with the API.** The producer connection uses
+  `enableOfflineQueue: false`, so an enqueue with Redis down fails fast; it is logged as
+  ERROR and returned as `{ "status": "FAILED", "error": ... }`. The evaluation that triggered
+  it is already saved and is not rolled back.
+- Dev responses (`/dev/opportunities/evaluate`, `/dev/interpretation/evaluate`) include a
+  `reevaluation` field: `SCHEDULED` (with job ids and times), `NOTHING_TO_SCHEDULE`,
+  `DISABLED` or `FAILED`.
+
+| Failure | Behavior |
+|---|---|
+| Opportunity missing / other company / inactive / unchanged | Job completes as a no-op |
+| Invalid payload | `UnrecoverableError`: failed immediately, never retried |
+| DB or M2A error | Retried: 5 attempts, exponential backoff 5s → 10s → 20s → 40s |
+| Retries exhausted | Job kept as failed for 14 days, ERROR log. Opportunity untouched (M2A writes only after a successful evaluation) |
+| Redis down when scheduling | ERROR log + `FAILED` in the response; the request still succeeds |
+
+Logs carry `jobId`, `companyId`, `opportunityId`, `trigger`, `scheduledFor`, `executedAt`,
+`attempt`, and previous → new state/risk/priority. No message text.
+
+### Dev endpoints added
+
+| Method | Path | Notes |
+|---|---|---|
+| POST | `/dev/opportunities/:id/reevaluations` | `{companyId, at}` → `FOLLOW_UP_DUE` job; `404` other company, `422` past/too far, `503` disabled |
+| POST | `/dev/conversations/:conversationId/business-replies` | `{companyId, text?, sentAt?}` → records an `OUTBOUND` message. **Sends nothing.** |
+
+**Why the business-reply endpoint exists:** KEOM does not capture real seller replies yet
+(Meta delivers business-sent messages as statuses/echoes, which M1 ignores), so in real use
+"no business reply" is always true and `NO_BUSINESS_REPLY` will overstate risk until seller
+replies are ingested. Capturing them is future work.
+
+### Environment
+
+```
+REDIS_URL=redis://localhost:6380       # empty = M4 disabled
+REEVALUATION_GRACE_SECONDS=30          # optional
+REEVALUATION_ACTIVE_AFTER_HOURS=24     # optional, 0 disables
+OPPORTUNITY_STALL_MEDIUM_MINUTES=60    # M2A, optional
+OPPORTUNITY_STALL_HIGH_MINUTES=240     # M2A, optional
+```
+
+### Tests
+
+```bash
+pnpm --filter @keom/api test       # unit: scheduler, processor, reevaluate(), thresholds
+pnpm --filter @keom/api test:e2e   # e2e: real Postgres + real M2A; queue replaced in memory
+```
+
+No automated test needs Redis. `test/setup-env.ts` forces `REDIS_URL=""` for every e2e
+suite, and `test/reevaluation.e2e-spec.ts` overrides `ReevaluationQueue` with an in-memory
+queue (same "existing id is ignored" rule) and fires jobs by calling the processor with an
+injected execution time. Covered: scheduling at the checkpoints, `currentSignals`
+persisted, stalled → `AT_RISK` (Scenario A), business replied → unchanged with zero writes
+(Scenario B), customer wrote again → fresh timestamps respected, duplicate scheduling →
+same jobs, re-fired job → no change, inactive → no-op, other company → no-op, explicit
+follow-up (tenant + time checks), business-reply endpoint tenant check. BullMQ's own
+delay/de-duplication was verified against real Redis in the manual demo.
+
+### Manual demo with real Redis
+
+```bash
+cd apps/api
+docker compose up -d                      # Postgres + Redis
+REDIS_URL=redis://localhost:6380 \
+OPPORTUNITY_STALL_MEDIUM_MINUTES=1 OPPORTUNITY_STALL_HIGH_MINUTES=2 REEVALUATION_GRACE_SECONDS=5 \
+pnpm dev
+```
+
+Then, in another terminal, either run `pnpm demo` (step 7 does exactly this, see
+[`docs/DEMO.md`](../../docs/DEMO.md)) or by hand:
+
+1. Two customers write "Sí, quiero reservar para el sábado" (M1 webhook) and each
+   conversation goes through `POST /dev/interpretation/evaluate`. The response's
+   `reevaluation` lists two `NO_BUSINESS_REPLY` jobs, 1 and 2 minutes (+5s) after the message.
+2. Record a business reply for the second one only:
+   `POST /dev/conversations/<id>/business-replies {"companyId": "..."}`.
+3. Wait ~2 minutes and watch the API log.
+
+Observed on 2026-10-02 (real OpenAI for M2B, real Redis/BullMQ; jobs fired ~75 ms after
+their scheduled time):
+
+```
+Re-evaluation CHANGED state ENGAGED->ENGAGED, risk LOW->MEDIUM, ... trigger=NO_BUSINESS_REPLY scheduledFor=23:14:56.000Z executedAt=23:14:56.075Z attempt=1
+Re-evaluation unchanged (state=ENGAGED risk=LOW action=RESPOND), ... (the conversation that got a reply)
+Re-evaluation CHANGED state ENGAGED->AT_RISK, risk MEDIUM->HIGH, ... scheduledFor=23:15:56.000Z executedAt=23:15:56.053Z attempt=1
+Re-evaluation unchanged (state=ENGAGED risk=LOW action=RESPOND), ... (the conversation that got a reply)
+```
+
+- **Scenario A** (no reply): `ENGAGED` → risk `MEDIUM` at 1 min → `AT_RISK` / risk `HIGH` at
+  2 min. M4 only fired the checks; M2A's risk rule produced the change.
+- **Scenario B** (business replied before the checks): both checks ran on fresh data, M2A
+  answered "Business already responded", nothing was written.
+- Evaluating the same conversation again returned the same job ids and Redis still held 4
+  delayed jobs, not 6 (BullMQ de-duplication).
+- Note: the real M2B read "Sí, quiero reservar" as `BOOKING_INTENT` + interest `HIGH`
+  → score 50 → `ENGAGED` (not `HIGH_INTENT`, which needs `HIGH` priority). That is M2A's
+  existing rule; M4 does not change it.
+
+### Not in M4 (future milestones)
+
+**Next:** capture real seller replies (Meta statuses/echoes) so `NO_BUSINESS_REPLY` reflects
+reality; `NO_CUSTOMER_REPLY` once M2A has a rule for it; automating webhook → M2B; a recovery
+sweep that re-schedules checks for active opportunities if Redis data is lost; a separate
+worker process. **M5:** notifications, seller approval, escalation. **M6:** outbound
+WhatsApp. **Later:** terminal outcomes (won/lost/recovered), recovered revenue, CRM/calendar/
+payment integrations.
 
 ---
 

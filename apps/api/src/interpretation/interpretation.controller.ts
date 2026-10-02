@@ -38,7 +38,7 @@ export class InterpretationController {
     }
 
     try {
-      const { interpretation, result } = await this.interpretation.evaluate(payload.conversationId);
+      const { interpretation, result, reevaluation } = await this.interpretation.evaluate(payload.conversationId);
 
       return {
         interpretation,
@@ -59,6 +59,7 @@ export class InterpretationController {
               isActive: result.opportunity.isActive,
             }
           : { noOp: true, reason: "No active Opportunity and no commercial signal detected; nothing created." },
+        reevaluation,
       };
     } catch (err) {
       throw this.toHttpException(err);
