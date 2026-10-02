@@ -11,6 +11,7 @@
     "test": "jest",
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "eval:interpreters": "tsx evals/commercial-interpretation/run-eval.ts",
+    "demo": "tsx scripts/demo.ts",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",

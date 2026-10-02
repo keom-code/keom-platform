@@ -754,9 +754,10 @@ embeddings).
 4. `GroundedResponder` (OpenAI, reusing `OPENAI_MODEL`/`OPENAI_API_KEY`/`LLM_TIMEOUT_MS`;
    OpenAI-only regardless of `LLM_PROVIDER`, since Jev can't draft text) gets the bounded
    conversation, sources labelled `[S1]…[Sn]`, and the optional M2B intent/signals as
-   context. Prompt rules: facts only from sources; answer the covered part and defer the
-   rest; nothing covered → `insufficientKnowledge`; never confirm live data; never decide
-   commercial state. Output is Zod-validated.
+   context. Prompt rules: reply only to the customer's latest message; facts only from
+   sources; answer the covered part and defer the rest; nothing in the latest message
+   covered → `insufficientKnowledge`; never confirm live data; never decide commercial
+   state. Output is Zod-validated.
 5. Grounding checks in code: the suggestion must cite ≥ 1 source, and every cited id must
    be one that was retrieved — otherwise it is discarded as `INSUFFICIENT_KNOWLEDGE`.
 
@@ -880,8 +881,13 @@ curl -s -X POST $B/search -H 'Content-Type: application/json' \
   -d '{"companyId": "'$CLINIC'", "query": "¿Cuánto cuesta el plan y cuántos usuarios incluye?"}'
 ```
 
-Full chain: post the M1 fixture webhook, run `POST /dev/interpretation/evaluate` (M2B → M2A),
-then pass its `interpretation` to `suggest-response`:
+**End-to-end demo of all milestones:** `pnpm --filter @keom/api demo` (with the API running)
+runs the whole story — webhook → M2B → M2A → M3 — and explains each step; see
+[`docs/DEMO.md`](../../docs/DEMO.md). Keep `scripts/demo.ts` and that guide updated at the
+end of every milestone.
+
+Full chain by hand: post the M1 fixture webhook, run `POST /dev/interpretation/evaluate`
+(M2B → M2A), then pass its `interpretation` to `suggest-response`:
 
 ```bash
 curl -s -X POST $B/suggest-response -H 'Content-Type: application/json' \
