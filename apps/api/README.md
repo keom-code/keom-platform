@@ -587,6 +587,323 @@ outbound WhatsApp, recovered opportunities/revenue.
 
 ---
 
+## Milestone 3 — Business Knowledge / RAG
+
+M3 scope: company knowledge input → normalization → chunking → embeddings → PostgreSQL +
+pgvector → company-scoped retrieval → (optional) grounded suggested response. The three
+layers answer different questions and none replaces another:
+
+- **M2B:** "What does the customer mean?" (signals, intent)
+- **M2A:** "What should happen commercially?" (score, priority, state, risk, next best action)
+- **M3:** "What verified business information is relevant to this situation?"
+
+M3 never computes score/priority/state/risk/next best action, never interprets commercial
+meaning, never calls M2A, never sends anything. No Redis/BullMQ/queues, no outbound
+WhatsApp, no frontend changes, no integrations.
+
+### Architecture
+
+```
+src/llm/        provider SDK code only
+  EmbeddingProvider  (DI token EMBEDDING_PROVIDER)  -> OpenAiEmbeddingProvider
+  GroundedResponder  (DI token GROUNDED_RESPONDER)  -> OpenAiGroundedResponder
+src/knowledge/  M3 domain, no SDK imports
+  text-normalizer.ts, chunker.ts      pure, deterministic
+  KnowledgeChunkRepository            the ONLY raw SQL / pgvector code
+  KnowledgeDocumentsService           create/update/delete/list/get: normalize -> chunk -> embed -> persist
+  KnowledgeRetrievalService           companyId + query -> embed -> scoped search -> threshold
+  retrieval-query.ts                  pure: conversation -> bounded retrieval query
+  GroundedResponseService             conversation -> retrieval -> responder -> grounding checks
+  KnowledgeController                 /dev/knowledge/*
+```
+
+`KnowledgeModule` imports `LlmModule` (the two DI tokens) and `InterpretationModule` (only
+for `ContextBuilderService`). It does not import `OpportunitiesModule`.
+
+### pgvector setup
+
+pgvector is a PostgreSQL extension, not a separate service: the same single Postgres
+container now runs the official `pgvector/pgvector:0.8.7-pg16` image (PostgreSQL 16 with
+the extension preinstalled) instead of `postgres:16-alpine`. The migration runs
+`CREATE EXTENSION IF NOT EXISTS vector` (added by hand: Prisma 6 only emits it behind the
+`postgresqlExtensions` preview flag, which we don't enable).
+
+**Upgrading an existing local volume:** the old image was Alpine (musl), the new one is
+Debian (glibc); same Postgres major version, but text collations differ. Local data is
+reproducible, so recreate it:
+
+```bash
+cd apps/api
+docker compose down -v && docker compose up -d
+pnpm --filter @keom/api prisma:migrate
+pnpm --filter @keom/api prisma:seed     # now also seeds "SaaS Demo" (00000000-0000-4000-8000-000000000003)
+```
+
+### Domain model (Prisma)
+
+Industry-agnostic on purpose: **no domain columns** (no price, schedule, product, property
+fields). Anything business-specific goes in free-form `metadata`.
+
+- **`KnowledgeDocument`** — `companyId`, `title`, `sourceType` (`TEXT | MARKDOWN`),
+  `sourceName?`, `content` (normalized text, the source of truth for re-chunking),
+  `contentHash` (sha256 of title + normalized content), `metadata` (JSON).
+  `@@unique([companyId, contentHash])` makes an accidental duplicate POST return the
+  existing document (`200`, `created: false`) instead of re-indexing it.
+- **`KnowledgeChunk`** — `companyId`, `documentId`, `chunkIndex`, `content`, `metadata`
+  (copy of the document's), `embedding vector(1536)`, `embeddingModel`.
+  - Composite FK `(document_id, company_id) → knowledge_document(id, company_id)`: a chunk
+    whose company differs from its document's is rejected **by the database**.
+  - `ON DELETE CASCADE`: deleting a document deletes its vectors; nothing stale remains.
+  - `embeddingModel`: retrieval only compares vectors from the current model.
+
+**No processing status (`PENDING/READY/FAILED`).** Ingestion embeds every chunk before
+writing anything, then writes the document and its chunks in one transaction, so a
+partially indexed document cannot exist. A status column belongs with async ingestion (M4).
+
+**Generic metadata.** Flat object of string/number/boolean values, ≤ 20 keys, e.g.
+`{ "category": "pricing", "language": "es", "region": "lima" }`. Core retrieval never reads
+specific keys; the only use is an optional `metadataFilter` on search, applied as a JSONB
+containment (`metadata @> filter`).
+
+### Embeddings
+
+`text-embedding-3-small`, **1536 dimensions** (its native size, verified against OpenAI's
+docs; it accepts a `dimensions` parameter, and 1536 is sent explicitly). Cheapest current
+OpenAI embedding model, and under pgvector's 2000-dimension HNSW limit should an index be
+needed later. `KNOWLEDGE_EMBEDDING_DIMENSIONS` (code constant) must match the
+`vector(1536)` column; every returned vector is length- and finiteness-checked.
+
+**Changing model or dimension** means a migration altering the column type **and**
+re-embedding every document (possible because normalized `content` is stored) — e.g. a
+`PUT` per document. The `embeddingModel` filter keeps old and new vectors from being mixed
+in the meantime.
+
+### Chunking
+
+Pure and deterministic (`src/knowledge/chunker.ts`), character-based (no tokenizer
+dependency):
+
+- **maxChars 1200** (~300 tokens): FAQ/policy/pricing paragraphs are short; a chunk holds one
+  or two facts so retrieval stays precise.
+- **overlapChars 150**: each chunk after the first starts with the tail of the previous one,
+  so a fact straddling a boundary survives.
+- Blocks split on blank lines (a Markdown heading also starts a block), oversized blocks
+  split at sentence boundaries, then at a word boundary as a last resort; blocks are packed
+  greedily. Every chunk is ≤ maxChars, overlap included.
+- Limits: 100k normalized characters and 200 chunks per document (`422` beyond).
+- The embedded text is `"{title}\n\n{chunk}"` (topical context); the stored text is the chunk.
+
+These are function parameters with exported defaults, deliberately **not** env vars:
+changing them silently would make existing documents' chunks inconsistent with new ones.
+
+### Retrieval
+
+```sql
+SELECT ..., 1 - (c.embedding <=> $query::vector) AS similarity
+FROM knowledge_chunk c JOIN knowledge_document d ON d.id = c.document_id AND d.company_id = c.company_id
+WHERE c.company_id = $companyId AND c.embedding_model = $model [AND c.metadata @> $filter]
+ORDER BY c.embedding <=> $query::vector LIMIT $topK
+```
+
+- `companyId` is a required parameter of the repository's only search method; there is no
+  unscoped variant.
+- Results below `minSimilarity` are dropped. **Empty result = "no relevant knowledge"**;
+  failures throw (`503`/`504`/`502`) — the two are never confused.
+- **No ANN index (exact scan), on purpose.** Filtered by `company_id`, an exact scan is
+  correct and fast at MVP scale (thousands of chunks per company). HNSW applies the `WHERE`
+  filter *after* the index scan and can return fewer than K rows for small tenants. When
+  needed: `CREATE INDEX ... USING hnsw (embedding vector_cosine_ops)` plus
+  `SET hnsw.iterative_scan = relaxed_order`.
+
+**Threshold calibration** (`text-embedding-3-small`, Spanish customer queries, manual demo
+on 2026-10-01):
+
+| Query → document | Relevant? | Similarity |
+|---|---|---|
+| "¿Cuál es su política de cancelación?" → cancellation policy | yes | 0.611 |
+| "¿Cuánto cuesta el plan y cuántos usuarios incluye?" → Business Plan | yes | 0.520 |
+| "¿Cuánto cuesta la depilación de piernas?" → laser FAQ | yes | 0.503 |
+| "Hola, ¿cuánto cuesta y tienen disponibilidad el sábado?" → laser FAQ (Spanish) | yes | 0.451 |
+| "¿Cuánto cuesta y atienden el sábado?" → laser FAQ (**English** content) | yes | 0.355 |
+| "Hola, ¿cuánto cuesta y tienen disponibilidad el sábado?" → laser FAQ (**English**) | yes | 0.322 |
+| "¿Tienen garantía de devolución para zapatos?" → cancellation policy | no | 0.315 |
+| SaaS plan question → clinic documents | no | 0.258 |
+| "¿Hacen envíos a provincia?" | no | 0.226 |
+| "hola" | no | 0.182 |
+
+Default **`KNOWLEDGE_MIN_SIMILARITY=0.35`**, `KNOWLEDGE_TOP_K=5`; both overridable per
+search request. **Known limitation:** content written in a different language than the
+customer scores ~0.1 lower and can fall under the threshold (row 6). Write knowledge in the
+customers' language; recalibrate when the model or language mix changes.
+
+**Retrieval query** (`retrieval-query.ts`, no extra LLM call): latest customer message,
+plus the previous one when the latest is under 40 chars ("¿y el sábado?"), plus M2B
+`serviceName`/`productName` entities when supplied and not already present; capped at 500
+chars. M2B signal names are not appended (English enum labels add noise to Spanish
+embeddings).
+
+### Grounded suggested response (optional)
+
+`POST /dev/knowledge/suggest-response { conversationId, interpretation? }`:
+
+1. `companyId` is **derived from the conversation** (via `ContextBuilderService`), never
+   taken from the caller.
+2. Build the retrieval query, retrieve.
+3. **No relevant chunks → `INSUFFICIENT_KNOWLEDGE` without calling the LLM.** No LLM call,
+   nothing to invent.
+4. `GroundedResponder` (OpenAI, reusing `OPENAI_MODEL`/`OPENAI_API_KEY`/`LLM_TIMEOUT_MS`;
+   OpenAI-only regardless of `LLM_PROVIDER`, since Jev can't draft text) gets the bounded
+   conversation, sources labelled `[S1]…[Sn]`, and the optional M2B intent/signals as
+   context. Prompt rules: facts only from sources; answer the covered part and defer the
+   rest; nothing covered → `insufficientKnowledge`; never confirm live data; never decide
+   commercial state. Output is Zod-validated.
+5. Grounding checks in code: the suggestion must cite ≥ 1 source, and every cited id must
+   be one that was retrieved — otherwise it is discarded as `INSUFFICIENT_KNOWLEDGE`.
+
+```ts
+{
+  status: "GROUNDED" | "INSUFFICIENT_KNOWLEDGE",
+  suggestedResponse: string | null,
+  grounded: boolean,
+  insufficientKnowledge: boolean,
+  requiresLiveVerification: boolean,
+  retrievalQuery: string | null,
+  sources: [{ chunkId, documentId, title, sourceName, chunkIndex, similarity }]  // cited chunks only
+}
+```
+
+Retrieval or provider failures are HTTP errors, so downstream code can tell apart
+*grounded answer*, *insufficient knowledge* and *failure*. Nothing is persisted or sent.
+
+### Static knowledge vs live data
+
+M3 holds static or semi-static knowledge: descriptions, price lists, policies, opening
+hours, FAQs, terms, warranties, promotions, playbooks. It is **never** authoritative for
+live operational data (appointment availability, stock, order/payment/shipment status,
+account data, CRM state, real-time capacity) — those come from future integrations.
+
+Enforced by the prompt (sources "never prove live facts"; give the general rule and say it
+must be confirmed) and by `requiresLiveVerification`, which is set when the model flags it
+**or**, deterministically, when the caller's M2B signals include `AVAILABILITY_REQUESTED`.
+Demo result: "¿Me confirmas una cita libre este sábado a las 3 pm?" →
+*"…atendemos los sábados de 9:00 a. m. a 5:00 p. m. La disponibilidad de este sábado a las
+3:00 p. m. debe confirmarse con el equipo."*, `requiresLiveVerification: true`.
+
+### Endpoints (dev-only, no auth — same conventions as M2A/M2B)
+
+| Method | Path | Notes |
+|---|---|---|
+| POST | `/dev/knowledge/documents` | `{companyId, title, content, sourceType?, sourceName?, metadata?}` → `201` indexed / `200` identical retry |
+| GET | `/dev/knowledge/documents?companyId=` | list (no content) |
+| GET | `/dev/knowledge/documents/:id?companyId=` | `404` if it belongs to another company |
+| PUT | `/dev/knowledge/documents/:id` | full replacement `{companyId, title, content, ...}`; chunks rebuilt |
+| DELETE | `/dev/knowledge/documents/:id?companyId=` | `204`; chunks cascade |
+| POST | `/dev/knowledge/search` | `{companyId, query, topK?, minSimilarity?, metadataFilter?}` |
+| POST | `/dev/knowledge/suggest-response` | `{conversationId, interpretation?}` |
+
+### Environment
+
+```
+EMBEDDING_PROVIDER=openai
+OPENAI_EMBEDDING_MODEL=text-embedding-3-small
+OPENAI_API_KEY=               # shared with M2B
+EMBEDDING_TIMEOUT_MS=         # optional, falls back to LLM_TIMEOUT_MS
+KNOWLEDGE_TOP_K=5             # optional
+KNOWLEDGE_MIN_SIMILARITY=0.35 # optional
+```
+
+Resolved lazily per call, like M2B: the API boots and M1/M2A/M2B work with none of these
+set; only `/dev/knowledge/*` calls fail, with `503`.
+
+### Failure handling
+
+| Failure | Result |
+|---|---|
+| Missing/invalid embedding or LLM config | `503`, nothing written |
+| Provider timeout | `504`, nothing written |
+| Provider error, wrong dimensions, bad output | `502`, nothing written |
+| Empty content / no chunks / too large | `422`, nothing embedded or written |
+| Unknown company, or document of another company | `404` |
+| `PUT` making a document identical to another | `409` |
+| DB write failure | `500`, transaction rolled back |
+| Vector search failure | `503` |
+| No relevant matches | `200` with empty `chunks` / `INSUFFICIENT_KNOWLEDGE` |
+
+An update whose embedding fails leaves the previous version fully searchable (embedding
+happens before the transaction that swaps chunks).
+
+### Tests
+
+```bash
+pnpm --filter @keom/api test       # unit: chunker, normalizer, retrieval query, providers, services
+pnpm --filter @keom/api test:e2e   # e2e: real Postgres + pgvector; embedder and responder mocked
+```
+
+No automated test calls a real provider. The e2e suite DI-overrides `EMBEDDING_PROVIDER`
+with `test/fake-embedding-provider.ts` (deterministic hashed bag of words, L2-normalized) and
+`GROUNDED_RESPONDER` with a jest mock. It ingests clinic, SaaS and real-estate documents
+through the same schema and covers: 1536-dim vectors stored, idempotent retry, empty
+content, embedding failure on create/update (no partial state), ranking + traceability,
+company isolation (search, get, update, delete, and the DB-level composite FK), threshold,
+metadata filter, update without stale chunks, delete cascade, grounded suggestion sourced
+only from the conversation's company, and `INSUFFICIENT_KNOWLEDGE` without an LLM call.
+
+### Manual demo with real providers
+
+With `EMBEDDING_PROVIDER`, `OPENAI_EMBEDDING_MODEL` and `OPENAI_API_KEY` set (see M1 setup
+for Postgres/migrate/seed):
+
+```bash
+CLINIC=00000000-0000-4000-8000-000000000001   # Clínica Demo (seeded)
+SAAS=00000000-0000-4000-8000-000000000003     # SaaS Demo (seeded)
+B=http://localhost:3001/dev/knowledge
+
+# A — clinic
+curl -s -X POST $B/documents -H 'Content-Type: application/json' -d '{
+  "companyId": "'$CLINIC'", "title": "Depilación láser — preguntas frecuentes",
+  "metadata": { "category": "pricing", "language": "es" },
+  "content": "La depilación láser de piernas cuesta S/320 por sesión.\nAtendemos los sábados de 9 AM a 5 PM.\nLas citas requieren confirmación."
+}'
+curl -s -X POST $B/search -H 'Content-Type: application/json' \
+  -d '{"companyId": "'$CLINIC'", "query": "¿Cuánto cuesta y atienden el sábado?"}'
+
+# B — SaaS (same endpoints, same schema)
+curl -s -X POST $B/documents -H 'Content-Type: application/json' -d '{
+  "companyId": "'$SAAS'", "title": "Business Plan", "metadata": { "category": "plans" },
+  "content": "The Business Plan costs $99/month.\nIt includes 20 users, API access, and email support.\nAnnual subscriptions receive a 15% discount."
+}'
+curl -s -X POST $B/search -H 'Content-Type: application/json' \
+  -d '{"companyId": "'$SAAS'", "query": "¿Cuánto cuesta el plan y cuántos usuarios incluye?"}'
+
+# Isolation: the SaaS question against the clinic returns only clinic chunks (or none)
+curl -s -X POST $B/search -H 'Content-Type: application/json' \
+  -d '{"companyId": "'$CLINIC'", "query": "¿Cuánto cuesta el plan y cuántos usuarios incluye?"}'
+```
+
+Full chain: post the M1 fixture webhook, run `POST /dev/interpretation/evaluate` (M2B → M2A),
+then pass its `interpretation` to `suggest-response`:
+
+```bash
+curl -s -X POST $B/suggest-response -H 'Content-Type: application/json' \
+  -d '{"conversationId": "<conversation-id>", "interpretation": <interpretation from M2B>}'
+```
+
+Observed (2026-10-01, `gpt-5.6-luna`, reasoning effort `none`): for *"Hola, ¿cuánto cuesta y
+tienen disponibilidad el sábado?"* → `GROUNDED`, *"Hola, la depilación láser de piernas cuesta
+S/320 por sesión. Atendemos los sábados de 9:00 a. m. a 5:00 p. m., pero la disponibilidad de
+un horario específico debe confirmarse. ¿Qué horario te interesa?"*, citing only the FAQ
+chunk, `requiresLiveVerification: true`. After deleting the FAQ → `INSUFFICIENT_KNOWLEDGE`.
+
+### Not in M3 (future milestones)
+
+**M4:** Redis/BullMQ, async ingestion (and a document status column), delayed
+reevaluation, timers, stale-opportunity detection. **M5:** notifications, seller approval
+workflow, escalation. **M6:** outbound WhatsApp. **Later:** calendar/inventory/CRM/payment/
+order integrations for live data, PDF/file parsing, OCR, semantic chunking, query rewriting,
+ANN index, citation UI, recovered revenue.
+
+---
+
 Consumes `@keom/mocks` for the WhatsApp fixture. `@keom/contracts` remains the
 FE↔BE contract surface for `apps/web`-facing endpoints (not used by this webhook,
 which has no frontend consumer) — see `docs/ARCHITECTURE.md` Section A for the plan

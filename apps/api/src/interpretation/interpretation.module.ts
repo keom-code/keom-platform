@@ -9,6 +9,7 @@ import { InterpretationController } from "./interpretation.controller";
   imports: [LlmModule, OpportunitiesModule],
   providers: [ContextBuilderService, InterpretationService],
   controllers: [InterpretationController],
-  exports: [InterpretationService],
+  // ContextBuilderService is also used by M3 (KnowledgeModule) for grounded suggestions.
+  exports: [InterpretationService, ContextBuilderService],
 })
 export class InterpretationModule {}

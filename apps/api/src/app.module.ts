@@ -5,6 +5,7 @@ import { IngestionModule } from "./ingestion/ingestion.module";
 import { WhatsappModule } from "./whatsapp/whatsapp.module";
 import { OpportunitiesModule } from "./opportunities/opportunities.module";
 import { InterpretationModule } from "./interpretation/interpretation.module";
+import { KnowledgeModule } from "./knowledge/knowledge.module";
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { InterpretationModule } from "./interpretation/interpretation.module";
     WhatsappModule,
     OpportunitiesModule,
     InterpretationModule,
+    KnowledgeModule,
   ],
 })
 export class AppModule {}

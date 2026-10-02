@@ -10,7 +10,7 @@ where each piece is documented in depth. For the actual decisions/conventions, g
 - **Frontend architecture** (decisions, folder structure, route map, phases) →
   [`docs/ARCHITECTURE.md`](./ARCHITECTURE.md)
 - **Backend architecture and milestones** (M1 ingestion, M2A deterministic engine, M2B
-  LLM interpretation, local setup, testing) → [`apps/api/README.md`](../apps/api/README.md)
+  LLM interpretation, M3 business knowledge / RAG, local setup, testing) → [`apps/api/README.md`](../apps/api/README.md)
 
 ---
 
@@ -28,6 +28,8 @@ flowchart TD
     LLM --> Mapper["Mapper<br/>interpretation → M2A input<br/>thin, no business logic"]
     Mapper --> Engine["OpportunityEngineService<br/>apps/api/src/opportunities — M2A<br/>deterministic: score → priority → state → risk → next best action"]
     Engine --> DB
+
+    DB --> Knowledge["Knowledge / RAG<br/>apps/api/src/knowledge — M3<br/>company-scoped pgvector retrieval,<br/>optional grounded suggestion (never sent)"]
 
     DB -.->|"not yet wired — Phase 11"| WebApp["apps/web<br/>Next.js dashboard<br/>currently DATA_SOURCE=mock"]
     WebApp -->|renders| Seller["Seller / Admin"]
@@ -47,6 +49,7 @@ marks work that hasn't happened yet, not a live connection.
 | Ingestion | Tenant resolution, `RawEvent`/`Customer`/`Conversation`/`Message` persistence | `apps/api/src/ingestion` |
 | LLM interpretation | Turning conversation text into structured signals — **interprets, never decides** | `apps/api/src/llm`, `apps/api/src/interpretation` |
 | Opportunity engine | Score/priority/state/risk/next-best-action — **fully deterministic, no LLM** | `apps/api/src/opportunities` |
+| Business knowledge (RAG) | Company documents → chunks → embeddings (pgvector), company-scoped retrieval, optional grounded suggestion — **supplies facts, never decides or sends** | `apps/api/src/knowledge` (+ providers in `apps/api/src/llm`) |
 | Dashboard | Seller/admin UI, currently mock-driven | `apps/web` |
 | Shared FE↔BE types | Not yet consumed by `apps/api` — see `apps/api/README.md`'s note on this | `packages/contracts` |
 
@@ -58,5 +61,5 @@ marks work that hasn't happened yet, not a live connection.
 | M2A — Deterministic Opportunity Engine | Done | `apps/api/README.md` |
 | M2B — LLM Commercial Interpretation Layer | Done | `apps/api/README.md` |
 | Phase 11 — wire `apps/web` to real `apps/api` | Not started | `docs/ARCHITECTURE.md` |
-| M3 — business knowledge / RAG / pgvector | Not started | — |
+| M3 — Business Knowledge / RAG (pgvector) | Done | `apps/api/README.md` |
 | Redis/BullMQ, scheduled reevaluation, notifications, outbound WhatsApp | Not started | — |

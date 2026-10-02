@@ -76,6 +76,15 @@ enum SignalType {
   @@map("signal_type")
 }
 
+/// M3: how a KnowledgeDocument's content was supplied. Content kind (FAQ, policy, price
+/// list...) is deliberately NOT modelled here — that goes in free-form `metadata`.
+enum KnowledgeSourceType {
+  TEXT
+  MARKDOWN
+
+  @@map("knowledge_source_type")
+}
+
 enum NextBestAction {
   RESPOND
   SEND_INFORMATION
@@ -99,6 +108,7 @@ model Company {
   messages      Message[]
   rawEvents     RawEvent[]
   opportunities Opportunity[]
+  knowledgeDocuments KnowledgeDocument[]
 
   @@map("company")
 }
@@ -263,4 +273,56 @@ model ActionRecommendation {
 
   @@index([opportunityId])
   @@map("action_recommendation")
+}
+
+/// M3: one piece of static/semi-static business knowledge (FAQ, price list, policy...) for
+/// one Company. Industry-agnostic on purpose: no domain columns, anything business-specific
+/// goes in free-form `metadata`. `content` is the normalized text and the source of truth
+/// for re-chunking/re-embedding. No processing status: KnowledgeDocumentsService embeds
+/// every chunk before writing anything, then writes document + chunks in one transaction,
+/// so a partially indexed document cannot exist. `[companyId, contentHash]` makes an
+/// accidental duplicate POST return the existing document instead of re-indexing it.
+model KnowledgeDocument {
+  id          String              @id @default(uuid()) @db.Uuid
+  companyId   String              @map("company_id") @db.Uuid
+  company     Company             @relation(fields: [companyId], references: [id])
+  title       String
+  sourceType  KnowledgeSourceType @default(TEXT) @map("source_type")
+  sourceName  String?             @map("source_name")
+  content     String
+  contentHash String              @map("content_hash")
+  metadata    Json                @default("{}")
+  createdAt   DateTime            @default(now()) @map("created_at")
+  updatedAt   DateTime            @updatedAt @map("updated_at")
+  chunks      KnowledgeChunk[]
+
+  @@unique([id, companyId])
+  @@unique([companyId, contentHash])
+  @@index([companyId])
+  @@map("knowledge_document")
+}
+
+/// M3: one embedded chunk of a KnowledgeDocument. The composite FK (documentId, companyId)
+/// makes a chunk whose companyId differs from its document's impossible at the DB level,
+/// and cascades deletes so no stale vectors outlive their document. `embedding` is a
+/// pgvector column Prisma can't read/write natively — inserts and similarity search go
+/// through raw SQL in src/knowledge/knowledge-chunk.repository.ts only. The dimension
+/// (1536) is fixed by text-embedding-3-small; changing model/dimension means a migration
+/// plus re-embedding every document (see apps/api/README.md M3). `embeddingModel` keeps
+/// vectors from different models from ever being compared.
+model KnowledgeChunk {
+  id             String                      @id @default(uuid()) @db.Uuid
+  companyId      String                      @map("company_id") @db.Uuid
+  documentId     String                      @map("document_id") @db.Uuid
+  document       KnowledgeDocument           @relation(fields: [documentId, companyId], references: [id, companyId], onDelete: Cascade)
+  chunkIndex     Int                         @map("chunk_index")
+  content        String
+  metadata       Json                        @default("{}")
+  embedding      Unsupported("vector(1536)")
+  embeddingModel String                      @map("embedding_model")
+  createdAt      DateTime                    @default(now()) @map("created_at")
+
+  @@unique([documentId, chunkIndex])
+  @@index([companyId])
+  @@map("knowledge_chunk")
 }
