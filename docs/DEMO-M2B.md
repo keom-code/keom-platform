@@ -35,6 +35,10 @@ pnpm prisma:migrate                 # crea las tablas
 pnpm prisma:seed                    # crea el negocio de prueba "Clínica Demo"
 ```
 
+Si ya tenías la base de datos de antes de M3, recréala una vez (cambió la imagen a una con
+pgvector; **borra los datos locales de prueba**): `docker compose down -v` y vuelve a correr
+los tres últimos comandos.
+
 Abre `apps/api/.env` y deja estas líneas así, con tu key:
 
 ```
@@ -167,7 +171,9 @@ historial de estados.
 ## Qué falta (próximas fases)
 
 - Conectar el dashboard (`apps/web`) a esta API, para verlo en pantalla en vez de la terminal.
-- Registrar negocios y números de WhatsApp reales (hoy solo existe "Clínica Demo").
-- Conocimiento de cada negocio (servicios, precios, FAQs) para sugerir respuestas (M3).
+- Registrar negocios y números de WhatsApp reales (hoy solo "Clínica Demo" tiene un número de prueba).
+
+Siguiente demo: [`DEMO-M3.md`](./DEMO-M3.md) — el conocimiento de cada negocio (precios,
+horarios, políticas) y respuestas sugeridas basadas solo en él.
 
 Detalles técnicos: [`docs/SYSTEM.md`](./SYSTEM.md) y [`apps/api/README.md`](../apps/api/README.md).
