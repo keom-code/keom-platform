@@ -35,15 +35,15 @@ flowchart TD
 
     DB --> Knowledge["Knowledge / RAG<br/>apps/api/src/knowledge — M3<br/>company-scoped pgvector retrieval,<br/>optional grounded suggestion (never sent)"]
 
-    DB -.->|"not yet wired — Phase 11"| WebApp["apps/web<br/>Next.js dashboard<br/>currently DATA_SOURCE=mock"]
+    DB --> V1["/v1 API — Phase 11<br/>apps/api/src/auth + dashboard<br/>token auth, company-scoped read models"]
+    V1 -.->|"UI switch pending (DATA_SOURCE=http)"| WebApp["apps/web<br/>Next.js dashboard<br/>currently DATA_SOURCE=mock"]
     WebApp -->|renders| Seller["Seller / Admin"]
 ```
 
-**Read this loosely, not literally:** `apps/web` is drawn connected to the database
-because that's the eventual integration point (Phase 11 in `docs/ARCHITECTURE.md`), but
-today it is **not** wired to `apps/api` at all — it runs entirely against
-`packages/mocks` fixtures (`DATA_SOURCE=mock`). The dashed line above is deliberate: it
-marks work that hasn't happened yet, not a live connection.
+**Read this loosely, not literally:** the backend side of Phase 11 exists (the `/v1` API,
+see `docs/PHASE-11-API.md`), but `apps/web` still runs entirely against `packages/mocks`
+fixtures (`DATA_SOURCE=mock`). The dashed line marks the UI switch that hasn't happened yet,
+not a live connection.
 
 ## What each piece owns
 
@@ -55,8 +55,9 @@ marks work that hasn't happened yet, not a live connection.
 | Opportunity engine | Score/priority/state/risk/next-best-action — **fully deterministic, no LLM** | `apps/api/src/opportunities` |
 | Temporal re-evaluation | **When** to re-check an opportunity (after M2A's stall checkpoints, explicit follow-ups); fires M2A on fresh data — **never decides risk/state itself** | `apps/api/src/reevaluation` |
 | Business knowledge (RAG) | Company documents → chunks → embeddings (pgvector), company-scoped retrieval, optional grounded suggestion — **supplies facts, never decides or sends** | `apps/api/src/knowledge` (+ providers in `apps/api/src/llm`) |
-| Dashboard | Seller/admin UI, currently mock-driven | `apps/web` |
-| Shared FE↔BE types | Not yet consumed by `apps/api` — see `apps/api/README.md`'s note on this | `packages/contracts` |
+| Dashboard API | Users + login, authenticated `/v1` read models shaped as `packages/contracts` (alerts, risk), alert acknowledgement — **company-scoped from the token** | `apps/api/src/auth`, `apps/api/src/dashboard` |
+| Dashboard | Seller/admin UI, currently mock-driven (switching to `/v1` is Phase 11, see `docs/PHASE-11-API.md`) | `apps/web` |
+| Shared FE↔BE types | `apps/api` e2e tests validate every `/v1` response against them | `packages/contracts` |
 
 ## Milestone status
 
@@ -65,7 +66,7 @@ marks work that hasn't happened yet, not a live connection.
 | M1 — WhatsApp ingestion foundation | Done | `apps/api/README.md` |
 | M2A — Deterministic Opportunity Engine | Done | `apps/api/README.md` |
 | M2B — LLM Commercial Interpretation Layer | Done | `apps/api/README.md` |
-| Phase 11 — wire `apps/web` to real `apps/api` | Not started | `docs/ARCHITECTURE.md` |
+| Phase 11 — wire `apps/web` to real `apps/api` | Backend done (auth, alerts, risk); UI switch pending | `docs/PHASE-11-API.md` |
 | M3 — Business Knowledge / RAG (pgvector) | Done | `apps/api/README.md` |
 | M4 — Temporal Re-evaluation (BullMQ/Redis) | Done | `apps/api/README.md` |
 | M5 notifications / seller approval, M6 outbound WhatsApp | Not started | — |

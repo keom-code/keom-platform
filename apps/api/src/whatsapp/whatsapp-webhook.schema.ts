@@ -23,6 +23,20 @@ export const WhatsAppMessageSchema = z
   })
   .passthrough();
 
+/** Coexistence (`field: "smb_message_echoes"`): a message the business sent from the
+ * WhatsApp Business app or a linked device. `from` is the business number, `to` the
+ * customer. https://developers.facebook.com/docs/whatsapp/cloud-api/webhooks/reference/smb_message_echoes/ */
+export const WhatsAppMessageEchoSchema = z
+  .object({
+    from: z.string(),
+    to: z.string(),
+    id: z.string(),
+    timestamp: z.string(),
+    type: z.string(),
+    text: z.object({ body: z.string() }).optional(),
+  })
+  .passthrough();
+
 export const WhatsAppValueSchema = z
   .object({
     messaging_product: z.literal("whatsapp"),
@@ -34,6 +48,7 @@ export const WhatsAppValueSchema = z
       .passthrough(),
     contacts: z.array(WhatsAppContactSchema).optional(),
     messages: z.array(WhatsAppMessageSchema).optional(),
+    message_echoes: z.array(WhatsAppMessageEchoSchema).optional(),
   })
   .passthrough();
 

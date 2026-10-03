@@ -36,7 +36,8 @@ export class WhatsappController {
     }
 
     const entries = normalizeWhatsAppWebhook(payload);
-    await this.ingestion.ingestEvent({ provider: "WHATSAPP", entries, rawPayload: body });
+    const eventType = [...new Set(payload.entry.flatMap((entry) => entry.changes.map((change) => change.field)))].join(",");
+    await this.ingestion.ingestEvent({ provider: "WHATSAPP", eventType, entries, rawPayload: body });
 
     return { status: "ok" };
   }

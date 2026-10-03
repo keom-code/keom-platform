@@ -1,6 +1,6 @@
 # Demo KEOM — todo lo construido hasta ahora
 
-**Estado:** M1 + M2A + M2B + M3 + M4 · **Última actualización:** 2026-10-02 (cierre de M4)
+**Estado:** M1 + M2A + M2B + M3 + M4 + backend de Fase 11 · **Última actualización:** 2026-10-02
 
 Una sola historia, de punta a punta, para el equipo técnico: llega un mensaje de WhatsApp,
 la IA lo interpreta, el motor decide qué hacer con la oportunidad y KEOM sugiere qué responder
@@ -228,7 +228,7 @@ relevante.
 | M2B → M3 | Las señales y entidades de M2B son de toda la conversación, no del último mensaje | `requiresLiveVerification` queda en `true` en pasos que ya no preguntan disponibilidad | Revisar cuando se automatice el flujo (M4) |
 | M3 | Contenido en otro idioma que el cliente puntúa ~0.1 más bajo | Puede quedar bajo el umbral 0.35 y responder `INSUFFICIENT_KNOWLEDGE` | Cargar el conocimiento en el idioma de los clientes |
 | M3 | Las sugerencias a veces repiten datos ya dados (paso 3) | Respuestas algo largas | Ajuste de prompt si molesta en uso real |
-| M4 | KEOM no ve las respuestas reales del vendedor (solo el endpoint de desarrollo las registra) | En uso real, toda oportunidad con interés alto terminaría `AT_RISK` | Capturar respuestas del negocio (statuses/echoes de Meta) antes de usar M4 con clientes |
+| M4 | Las respuestas reales del vendedor solo se ven si el número está en modo coexistencia (`smb_message_echoes`, ya implementado) | Sin coexistencia, toda oportunidad con interés alto terminaría `AT_RISK` | Confirmar el modo de conexión del número del piloto |
 | M4 | No existe `NO_CUSTOMER_REPLY` (el cliente dejó de responder después del negocio) | Ese caso no se detecta | Primero una regla en M2A, luego el disparador en M4 |
 | M2A | "Sí, quiero reservar" sola da score 50 → `ENGAGED`, no `HIGH_INTENT` | Una reserva clara no se ve como alta intención hasta que pregunte disponibilidad | Revisar pesos de M2A si negocio lo considera necesario |
 | M4 | Si Redis pierde sus datos, los chequeos programados se pierden | Oportunidades que no se reevalúan | Persistencia AOF ya activa; un "barrido" de recuperación queda pendiente |
@@ -249,6 +249,18 @@ Todos los endpoints son de desarrollo (`/dev/...`, sin autenticación). Detalle 
 | M3 | `POST /dev/knowledge/suggest-response` | Respuesta sugerida para una conversación |
 | M4 | `POST /dev/opportunities/:id/reevaluations` | Programar un chequeo a una hora concreta (`FOLLOW_UP_DUE`) |
 | M4 | `POST /dev/conversations/:id/business-replies` | Registrar que el negocio respondió (no envía nada) |
+
+**API para el dashboard (Fase 11, con login).** Es lo que usará `apps/web`; requiere
+`AUTH_JWT_SECRET` en `apps/api/.env`. Usuarios de prueba (creados por `prisma:seed`):
+vendedor DNI `12345678`, admin DNI `87654321`, contraseña `keom-demo-2026`. Referencia
+completa en [`docs/PHASE-11-API.md`](./PHASE-11-API.md).
+
+```bash
+TOKEN=$(curl -s -X POST http://localhost:3001/v1/auth/login -H "Content-Type: application/json" \
+  -d '{"dni":"12345678","password":"keom-demo-2026"}' | node -pe 'JSON.parse(require("fs").readFileSync(0)).token')
+curl -s http://localhost:3001/v1/seller/alerts -H "Authorization: Bearer $TOKEN"   # alertas del vendedor
+curl -s http://localhost:3001/v1/seller/risks -H "Authorization: Bearer $TOKEN"    # clientes en riesgo
+```
 
 Ejemplo, buscar en la clínica:
 
@@ -273,10 +285,10 @@ pnpm prisma:studio
 
 ## 6. Qué falta (próximas fases)
 
-- **Fase 11:** conectar el dashboard (`apps/web`) a esta API, para ver esto en pantalla.
-- **Respuestas reales del vendedor:** hoy KEOM no ve cuándo el negocio responde por WhatsApp
-  (por eso existe el endpoint de desarrollo). Hasta capturarlas, M4 marcaría todo como "sin
-  respuesta".
+- **Fase 11:** el backend ya está listo (login y API `/v1`); falta que el dashboard
+  (`apps/web`) la use en vez de los datos de prueba. Guía: `docs/PHASE-11-API.md`.
+- **Respuestas reales del vendedor:** KEOM ya las captura si el número del negocio está en
+  modo coexistencia (WhatsApp Business app + Cloud API); falta confirmar ese modo con el piloto.
 - **Flujo automático:** llega el mensaje → se interpreta, decide y sugiere solo (hoy son
   llamadas manuales a `/dev/...`).
 - **M5:** notificaciones, aprobación del vendedor, escalamiento.

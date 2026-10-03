@@ -52,4 +52,67 @@ describe("normalizeWhatsAppWebhook", () => {
     expect(entries).toHaveLength(1);
     expect(entries[0]!.messages).toHaveLength(0);
   });
+
+  /** Meta's documented smb_message_echoes example, with the demo phone_number_id. */
+  function echoPayload(echo: Record<string, unknown>) {
+    return WhatsAppWebhookPayloadSchema.parse({
+      object: "whatsapp_business_account",
+      entry: [
+        {
+          id: "102290129340398",
+          changes: [
+            {
+              field: "smb_message_echoes",
+              value: {
+                messaging_product: "whatsapp",
+                metadata: { display_phone_number: "15550783881", phone_number_id: WHATSAPP_DEMO_PHONE_NUMBER_ID },
+                message_echoes: [echo],
+              },
+            },
+          ],
+        },
+      ],
+    });
+  }
+
+  it("normalizes a coexistence echo (business reply from the WhatsApp Business app) as OUTBOUND to the customer", () => {
+    const entries = normalizeWhatsAppWebhook(
+      echoPayload({
+        from: "15550783881",
+        to: WHATSAPP_DEMO_CUSTOMER_WA_ID,
+        id: "wamid.HBgLMTY0NjcwNDM1OTUVAgARGBIyNDlBOEI5QUQ4NDc0N0FCNjMA",
+        timestamp: "1739321024",
+        type: "text",
+        text: { body: "Here's the info you requested!" },
+      }),
+    );
+
+    expect(entries).toEqual([
+      {
+        phoneNumberId: WHATSAPP_DEMO_PHONE_NUMBER_ID,
+        messages: [
+          {
+            provider: "WHATSAPP",
+            direction: "OUTBOUND",
+            phoneNumberId: WHATSAPP_DEMO_PHONE_NUMBER_ID,
+            externalMessageId: "wamid.HBgLMTY0NjcwNDM1OTUVAgARGBIyNDlBOEI5QUQ4NDc0N0FCNjMA",
+            externalCustomerId: WHATSAPP_DEMO_CUSTOMER_WA_ID,
+            messageType: "TEXT",
+            text: "Here's the info you requested!",
+            occurredAt: new Date(1739321024 * 1000),
+          },
+        ],
+      },
+    ]);
+  });
+
+  it("marks customer messages as INBOUND and skips non-text echoes", () => {
+    const inbound = normalizeWhatsAppWebhook(WhatsAppWebhookPayloadSchema.parse(receivedTextMessageWebhook));
+    expect(inbound[0]!.messages[0]!.direction).toBe("INBOUND");
+
+    const image = normalizeWhatsAppWebhook(
+      echoPayload({ from: "15550783881", to: WHATSAPP_DEMO_CUSTOMER_WA_ID, id: "wamid.x", timestamp: "1739321024", type: "image", image: { id: "1" } }),
+    );
+    expect(image[0]!.messages).toEqual([]);
+  });
 });

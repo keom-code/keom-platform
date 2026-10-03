@@ -11,6 +11,9 @@ Updated at the end of every milestone.
 Start with [`docs/SYSTEM.md`](./docs/SYSTEM.md) for a system-wide overview (diagram +
 milestone status) tying `apps/web` and `apps/api` together. For the detailed docs:
 
+- [`docs/PHASE-11-API.md`](./docs/PHASE-11-API.md) — **start here to connect the web app to
+  the backend** (Phase 11): auth flow, `/v1` endpoints mapped to `packages/contracts`, what
+  the UI must change, what stays on mock.
 - [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) — **frontend** (`apps/web`)
   architecture blueprint (decisions, folder structure, route map, phases). Does not
   cover `apps/api`.

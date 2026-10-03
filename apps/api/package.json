@@ -46,7 +46,9 @@
     "@nestjs/common": "^11.0.1",
     "@nestjs/config": "^4.0.0",
     "@nestjs/core": "^11.0.1",
+    "@nestjs/jwt": "^11.0.2",
     "@nestjs/platform-express": "^11.0.1",
+    "@nestjs/throttler": "^6.7.1",
     "@prisma/client": "^6.1.0",
     "@typesafe-ai/sdk": "0.6.0",
     "bullmq": "^6.3.11",
@@ -58,6 +60,7 @@
   },
   "devDependencies": {
     "@keom/config": "workspace:*",
+    "@keom/contracts": "workspace:*",
     "@keom/mocks": "workspace:*",
     "@nestjs/cli": "^11.0.0",
     "@nestjs/schematics": "^11.0.0",

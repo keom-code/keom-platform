@@ -25,7 +25,7 @@ export class IngestionService {
       data: {
         companyId: primaryCompanyId ?? null,
         provider: event.provider as Provider,
-        eventType: "messages",
+        eventType: event.eventType ?? "messages",
         payload: event.rawPayload as Prisma.InputJsonValue,
         receivedAt: new Date(),
       },
@@ -125,7 +125,7 @@ export class IngestionService {
           companyId,
           conversationId: conversation.id,
           externalMessageId: message.externalMessageId,
-          direction: "INBOUND",
+          direction: message.direction,
           type: message.messageType,
           text: message.text,
           sentAt: message.occurredAt,

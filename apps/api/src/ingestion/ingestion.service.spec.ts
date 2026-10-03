@@ -26,6 +26,7 @@ describe("IngestionService", () => {
 
   const message: NormalizedMessage = {
     provider: "WHATSAPP",
+    direction: "INBOUND",
     phoneNumberId: PHONE_NUMBER_ID,
     externalMessageId: "wamid.1",
     externalCustomerId: "51900000000",

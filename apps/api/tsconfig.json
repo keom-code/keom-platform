@@ -18,7 +18,10 @@
     // apps/api actually consumes avoids pulling in the rest of @keom/mocks' fixture
     // tree (which imports @keom/contracts and would hit the same resolution gap).
     "paths": {
-      "@keom/mocks": ["../../packages/mocks/src/fixtures/whatsapp/received-text-message.ts"]
+      "@keom/mocks": ["../../packages/mocks/src/fixtures/whatsapp/received-text-message.ts"],
+      // Phase 11: tests parse /v1 responses with the frontend's own Zod schemas. Only test/
+      // imports it (src/ must not: the Nest build's rootDir is src).
+      "@keom/contracts": ["../../packages/contracts/src/index.ts"]
     }
   },
   "include": ["src", "prisma", "test", "evals", "scripts"]

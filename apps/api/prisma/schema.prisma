@@ -85,6 +85,24 @@ enum KnowledgeSourceType {
   @@map("knowledge_source_type")
 }
 
+/// Phase 11: who is calling the authenticated /v1 API. Matches @keom/contracts Role.
+enum UserRole {
+  SELLER
+  ADMIN
+
+  @@map("user_role")
+}
+
+/// Phase 11: seller-facing alert lifecycle, matching @keom/contracts AlertStatus.
+/// Forward-only for now (PENDING -> ACKNOWLEDGED -> COMPLETED); reopening rules belong to M5.
+enum AlertStatus {
+  PENDING
+  ACKNOWLEDGED
+  COMPLETED
+
+  @@map("alert_status")
+}
+
 enum NextBestAction {
   RESPOND
   SEND_INFORMATION
@@ -109,6 +127,7 @@ model Company {
   rawEvents     RawEvent[]
   opportunities Opportunity[]
   knowledgeDocuments KnowledgeDocument[]
+  users         User[]
 
   @@map("company")
 }
@@ -224,6 +243,11 @@ model Opportunity {
   /// fresh timestamps. OpportunitySignal rows stay the append-only history.
   currentSignals  SignalType[]      @default([]) @map("current_signals")
   lastEvaluatedAt DateTime?         @map("last_evaluated_at")
+  /// Phase 11: the seller's handling of this opportunity as an alert. Independent of M2A's
+  /// commercial state — re-evaluation never changes it.
+  alertStatus     AlertStatus       @default(PENDING) @map("alert_status")
+  acknowledgedAt  DateTime?         @map("acknowledged_at")
+  completedAt     DateTime?         @map("completed_at")
   createdAt       DateTime          @default(now()) @map("created_at")
   updatedAt       DateTime          @updatedAt @map("updated_at")
 
@@ -329,4 +353,24 @@ model KnowledgeChunk {
   @@unique([documentId, chunkIndex])
   @@index([companyId])
   @@map("knowledge_chunk")
+}
+
+/// Phase 11: a person who uses the dashboard. Belongs to exactly one Company — every /v1
+/// request is scoped to the companyId inside the caller's token, never to request input.
+/// `dni` is the login identifier (unique across KEOM, as in the UI's DNI login); it is never
+/// logged nor returned by the API. `passwordHash` is scrypt (src/auth/password.ts), never the
+/// password. Created by prisma/seed.ts until a real onboarding flow exists.
+model User {
+  id           String   @id @default(uuid()) @db.Uuid
+  companyId    String   @map("company_id") @db.Uuid
+  company      Company  @relation(fields: [companyId], references: [id])
+  name         String
+  role         UserRole
+  dni          String   @unique
+  passwordHash String   @map("password_hash")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@index([companyId])
+  @@map("user")
 }

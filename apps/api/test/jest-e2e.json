@@ -12,5 +12,8 @@
   ],
   "setupFiles": [
     "<rootDir>/setup-env.ts"
-  ]
+  ],
+  "moduleNameMapper": {
+    "^@keom/contracts$": "<rootDir>/../../../packages/contracts/src/index.ts"
+  }
 }

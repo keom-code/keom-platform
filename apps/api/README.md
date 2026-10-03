@@ -1115,10 +1115,64 @@ payment integrations.
 
 ---
 
-Consumes `@keom/mocks` for the WhatsApp fixture. `@keom/contracts` remains the
-FE↔BE contract surface for `apps/web`-facing endpoints (not used by this webhook,
-which has no frontend consumer) — see `docs/ARCHITECTURE.md` Section A for the plan
-to generate types from this API's OpenAPI spec once that surface stabilizes.
+## Phase 11 (backend side) — Authenticated `/v1` API for the web app
+
+Frontend-facing reference (auth flow, endpoints, UI changes, what stays on mock):
+**[`docs/PHASE-11-API.md`](../../docs/PHASE-11-API.md)**. This section is the backend view.
+
+### What was added
+
+- **Seller replies from WhatsApp coexistence.** `smb_message_echoes` webhooks (messages the
+  business sends from the WhatsApp Business app on a number also connected to the Cloud API)
+  are normalized as `OUTBOUND` messages through the existing M1 path (`direction` on
+  `NormalizedMessage`, idempotent on the message id; `RawEvent.eventType` now records the real
+  change field). M4's "no business reply" checks and the dashboard's reply status now reflect
+  real seller replies. Other coexistence fields (history, app state sync) are ignored.
+- **`User`** (`prisma/schema.prisma`): `companyId`, `name`, `role` (`SELLER`/`ADMIN`), unique
+  `dni` (login id; never logged nor returned), `passwordHash` (scrypt via `node:crypto`,
+  `src/auth/password.ts`). Created by `prisma/seed.ts` for now (same DNIs as the UI mocks);
+  real onboarding is future work.
+- **Auth** (`src/auth`): `POST /v1/auth/login {dni, password}` → HS256 JWT (`sub`, `companyId`,
+  `role`; issuer `keom-api`, audience `keom-web`; 12h), `GET /v1/auth/me`. `AuthGuard` verifies
+  the token, **re-reads the user** (deleted users / role changes apply immediately), checks
+  `@Roles`, and exposes `@CurrentUser()`. Login is throttled **per DNI** (5/min, in-memory) —
+  not per IP, because every web request arrives from the Next.js server. Same `401` message for
+  unknown DNI and wrong password, with a dummy hash check so timing doesn't reveal which. Config
+  is read per call: without `AUTH_JWT_SECRET` the API boots and `/v1` answers `503`.
+- **Dashboard read models** (`src/dashboard`): `/v1/seller/alerts`, `/v1/seller/alerts/:id/acknowledge`,
+  `/v1/seller/risks`, `/v1/admin/alerts`, `/v1/admin/alerts/:id`, shaped exactly as
+  `@keom/contracts` (`SellerAlert`, `CustomerRisk`, `AdminAlertRow`, `AdminAlertDetail`). Every
+  query uses **only the token's `companyId`**. An alert is an active opportunity whose latest
+  M2A action isn't `WAIT`. Spanish text is deterministic presentation of M2A's output
+  (`src/dashboard/presentation.ts`) — no new decisions, no LLM.
+- **Alert status** on `Opportunity` (`alertStatus` `PENDING`/`ACKNOWLEDGED`/`COMPLETED`,
+  `acknowledgedAt`, `completedAt`): the seller's handling, independent of M2A's commercial
+  state. Forward-only; completion and reopening rules are M5.
+
+### Not changed
+
+`packages/contracts` and `apps/web` are untouched (the UI engineer owns them). The one contract
+change the UI needs — `LoginRequest.password` — is documented in `docs/PHASE-11-API.md` §3.
+`/dev/*` endpoints are still unauthenticated and not meant for the web app (Phase 12 hardening).
+
+### Tests
+
+- Unit: password hashing, Spanish presentation, coexistence echo normalization.
+- e2e (`test/dashboard.e2e-spec.ts`, real Postgres): login (success, same error for unknown DNI
+  and wrong password, per-DNI throttling → `429`), missing/invalid/**tampered**/orphaned tokens
+  → `401`, roles → `403`, missing secret → `503`; seller alerts (company-scoped, ordering,
+  Spanish summary, `WAIT` excluded), idempotent acknowledge and cross-company `404`, risks with
+  level filter and accent-insensitive search, admin list/detail, and a coexistence echo webhook
+  turning "Sin respuesta del negocio" into "Esperando respuesta del cliente". **Every response
+  is parsed with the `@keom/contracts` Zod schema** (`tsconfig` path + Jest `moduleNameMapper`
+  to the contracts source; `src/` never imports it).
+
+---
+
+Consumes `@keom/mocks` for the WhatsApp fixture. `@keom/contracts` is the FE↔BE contract
+surface for the `/v1` endpoints; the e2e tests validate every `/v1` response against it (see
+the Phase 11 section). Generating types from an OpenAPI spec remains a later option
+(`docs/ARCHITECTURE.md` Section A).
 
 See the root [`docs/ARCHITECTURE.md`](../../docs/ARCHITECTURE.md) for full context on
 how this app fits into the monorepo.
